@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Croxync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-row">
+        <h1>Croxync</h1>
+        <span class="badge" id="status-indicator" title="Connected">●</span>
+      </div>
+      <p class="subtitle">Select text on any page to save</p>
+    </header>
+
+    <!-- Setup: generate or enter code -->
+    <div id="setup-section" class="section">
+      <button id="generate-btn" class="btn btn-primary btn-large">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Generate New Code
+      </button>
+
+      <div class="divider"><span>or join existing</span></div>
+
+      <input type="text" id="user-code" placeholder="Enter code (e.g. ABC123)" maxlength="6" style="text-transform: uppercase">
+      <input type="text" id="api-url" placeholder="Server URL (default: http://localhost:3000)" class="secondary-input">
+
+      <button id="save-settings" class="btn btn-secondary">Connect</button>
+      <div class="status" id="setup-status"></div>
+    </div>
+
+    <!-- QR code display after generating -->
+    <div id="qr-section" class="section hidden">
+      <div class="qr-card">
+        <h3>Your Sync Code</h3>
+        <p class="qr-code-display" id="qr-code-text"></p>
+        <div class="qr-image-wrapper">
+          <img id="qr-image" alt="QR Code" />
+        </div>
+        <p class="qr-hint">Scan this on your phone to connect.<br>Your code <strong>never changes</strong>.</p>
+      </div>
+      <button id="qr-done-btn" class="btn btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Done, Go to Extension
+      </button>
+    </div>
+
+    <!-- Main: connected state -->
+    <div id="main-section" class="section hidden">
+      <div class="code-display">
+        <span>Code: <strong id="display-code"></strong></span>
+        <div class="code-actions">
+          <button id="show-qr" class="btn btn-small" title="Show QR code">QR</button>
+          <button id="change-code" class="btn btn-small">Change</button>
+        </div>
+      </div>
+
+      <div id="qr-inline" class="qr-inline hidden">
+        <img id="qr-inline-image" alt="QR Code" />
+        <p class="qr-hint-inline">Scan on your phone</p>
+      </div>
+
+      <div class="paste-section">
+        <label>Quick paste</label>
+        <div class="paste-row">
+          <input type="text" id="paste-input" placeholder="Paste a link or text...">
+          <button id="paste-submit" class="btn btn-primary btn-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="quick-actions">
+        <button id="save-url" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Save Current URL
+        </button>
+        <button id="save-clipboard" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Save Clipboard
+        </button>
+      </div>
+
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="auto-save">
+          <span>Auto-save on copy (Ctrl+C)</span>
+        </label>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  createdAt DateTime @default(now())
+  clips     Clip[]
+}
+
+model Clip {
+  id        String   @id @default(cuid())
+  content   String
+  type      String   // "text", "url"
+  category  String   @default("general") // "general", "links", "code", "notes", "lists"
+  title     String?
+  source    String?
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
