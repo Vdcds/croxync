@@ -3,6 +3,7 @@
 
   const CONTAINER_ID = 'croxync-floating-widget';
   let widget = null;
+  let shadowRoot = null;
   let isVisible = false;
   let isExpanded = false;
   let hideTimeout = null;
@@ -11,15 +12,18 @@
   let savedPillTimeout = null;
 
   function shadow() {
-    return widget ? widget.shadowRoot : null;
+    return shadowRoot;
   }
 
   function createWidget() {
-    if (document.getElementById(CONTAINER_ID)) return;
+    if (document.getElementById(CONTAINER_ID)) {
+      widget = document.getElementById(CONTAINER_ID);
+      return;
+    }
 
     widget = document.createElement('div');
     widget.id = CONTAINER_ID;
-    const sr = widget.attachShadow({ mode: 'closed' });
+    shadowRoot = widget.attachShadow({ mode: 'closed' });
 
     const style = document.createElement('style');
     style.textContent = `
@@ -51,6 +55,12 @@
       @keyframes croxync-slide-up {
         0% { opacity:0; transform:translateX(-50%) translateY(12px); }
         100% { opacity:1; transform:translateX(-50%) translateY(0); }
+      }
+      @keyframes croxync-sync-flash {
+        0% { opacity:0; transform:translate(-50%, 0) scale(0.8); }
+        20% { opacity:1; transform:translate(-50%, 0) scale(1); }
+        80% { opacity:1; transform:translate(-50%, 0) scale(1); }
+        100% { opacity:0; transform:translate(-50%, -8px) scale(0.95); }
       }
 
       .wrapper {
@@ -88,6 +98,7 @@
         font-weight: 600;
         color: #fff;
         letter-spacing: 0.02em;
+        cursor: pointer;
       }
 
       .pill-btn {
@@ -374,7 +385,7 @@
 
       .toast {
         position: fixed;
-        bottom: 20px;
+        bottom: 24px;
         left: 50%;
         transform: translateX(-50%) translateY(12px);
         color: #e2e8f0;
@@ -410,6 +421,30 @@
       }
 
       .toast svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+      .sync-indicator {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2147483646;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: 12px;
+        background: rgba(16,185,129,0.12);
+        border: 1px solid rgba(16,185,129,0.3);
+        color: #6ee7b7;
+        font-size: 13px;
+        font-weight: 600;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        backdrop-filter: blur(12px);
+        animation: croxync-sync-flash 2s ease-out forwards;
+      }
+
+      .sync-indicator svg { width: 16px; height: 16px; }
     `;
 
     const wrapper = document.createElement('div');
@@ -483,27 +518,39 @@
       </div>
     `;
 
-    sr.appendChild(style);
-    sr.appendChild(wrapper);
+    shadowRoot.appendChild(style);
+    shadowRoot.appendChild(wrapper);
     document.body.appendChild(widget);
 
-    sr.getElementById('croxync-pill-save').addEventListener('click', onPillSave);
-    sr.getElementById('croxync-close').addEventListener('click', dismiss);
-    sr.getElementById('croxync-save-btn').addEventListener('click', onPanelSave);
-    sr.getElementById('croxync-copy-btn').addEventListener('click', onCopyAndSave);
-    sr.getElementById('croxync-paste-btn').addEventListener('click', onPasteSubmit);
-    sr.getElementById('croxync-paste-input').addEventListener('keydown', (e) => {
+    shadowRoot.getElementById('croxync-pill-save').addEventListener('click', onPillSave);
+    shadowRoot.getElementById('croxync-close').addEventListener('click', dismiss);
+    shadowRoot.getElementById('croxync-save-btn').addEventListener('click', onPanelSave);
+    shadowRoot.getElementById('croxync-copy-btn').addEventListener('click', onCopyAndSave);
+    shadowRoot.getElementById('croxync-paste-btn').addEventListener('click', onPasteSubmit);
+    shadowRoot.getElementById('croxync-paste-input').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') onPasteSubmit();
     });
 
-    // Category buttons
-    const catButtons = sr.querySelectorAll('.cat-btn');
+    const catButtons = shadowRoot.querySelectorAll('.cat-btn');
     catButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         catButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
       });
     });
+
+    // Click pill label to expand panel
+    const pillLabel = shadowRoot.getElementById('croxync-pill-label');
+    if (pillLabel) {
+      pillLabel.style.cursor = 'pointer';
+      pillLabel.addEventListener('click', () => {
+        const text = getSelectedText();
+        if (text) {
+          showPanel(text);
+          positionNearSelection();
+        }
+      });
+    }
 
     document.addEventListener('mousedown', onDocumentClick);
     document.addEventListener('keydown', onKeyDown);
@@ -514,6 +561,12 @@
   function getSelectedText() {
     const sel = window.getSelection();
     return sel ? sel.toString().trim() : '';
+  }
+
+  function ensureWidget() {
+    if (!widget || !document.getElementById(CONTAINER_ID)) {
+      createWidget();
+    }
   }
 
   function positionNearSelection() {
@@ -528,14 +581,12 @@
 
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
-    const pillWidth = 160;
-    const panelWidth = 320;
 
     if (!isExpanded) {
       let top = rect.top + window.scrollY - 44;
       let left = rect.left + window.scrollX + rect.width / 2;
       if (top < 8) top = rect.bottom + window.scrollY + 10;
-      left = Math.max(pillWidth / 2, Math.min(left, window.innerWidth - pillWidth / 2));
+      left = Math.max(80, Math.min(left, window.innerWidth - 80));
       wrapper.style.top = top + 'px';
       wrapper.style.left = left + 'px';
       wrapper.style.transform = `translateX(-50%)`;
@@ -569,8 +620,7 @@
     saveBtn.classList.remove('saved');
     saveBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
 
-    // Auto-select category based on content type
-    selectedCategory = isLink ? 'links' : 'general';
+    selectedCategory = typeof detectCategory === 'function' ? detectCategory(text, isLink ? 'url' : 'text') : (isLink ? 'links' : 'general');
     const catBtns = s.querySelectorAll('.cat-btn');
     catBtns.forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-cat') === selectedCategory);
@@ -596,8 +646,7 @@
     preview.classList.toggle('fade', selectedText.length > 200);
     preview.classList.toggle('is-url', isLink);
 
-    // Auto-select category
-    selectedCategory = isLink ? 'links' : 'general';
+    selectedCategory = typeof detectCategory === 'function' ? detectCategory(selectedText, isLink ? 'url' : 'text') : (isLink ? 'links' : 'general');
     const catBtns = s.querySelectorAll('.cat-btn');
     catBtns.forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-cat') === selectedCategory);
@@ -610,7 +659,6 @@
       Save
     `;
 
-    // Reset link saved banner
     s.getElementById('croxync-link-saved').classList.remove('visible');
     s.getElementById('croxync-paste-input').value = '';
 
@@ -697,18 +745,29 @@
     }, 2200);
   }
 
+  // Subtle top-of-page sync indicator
+  function showSyncIndicator(msg) {
+    const existing = document.getElementById('croxync-sync-indicator');
+    if (existing) existing.remove();
+
+    const el = document.createElement('div');
+    el.id = 'croxync-sync-indicator';
+    el.className = 'sync-indicator';
+    el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${msg}`;
+    document.body.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 2000);
+  }
+
   function flashLinkSaved() {
     const s = shadow();
     if (!s) return;
 
-    // Flash on pill
     const pill = s.getElementById('croxync-pill');
     if (pill) {
       pill.classList.add('is-link-saved');
       setTimeout(() => pill.classList.remove('is-link-saved'), 600);
     }
 
-    // Show link banner in panel
     const banner = s.getElementById('croxync-link-saved');
     if (banner) {
       banner.classList.add('visible');
@@ -729,8 +788,10 @@
         return;
       }
       if (response && response.success) {
-        showToast(data.type === 'url' ? 'Link synced!' : 'Synced to phone!', 'success', data.type === 'url');
-        if (data.type === 'url') flashLinkSaved();
+        const isLink = data.type === 'url';
+        showToast(isLink ? 'Link synced!' : 'Synced to phone!', 'success', isLink);
+        showSyncIndicator(isLink ? 'Link synced' : 'Clip synced');
+        if (isLink) flashLinkSaved();
       } else if (response && response.error) {
         showToast(response.error, 'error');
       }
@@ -745,7 +806,7 @@
     sendToBackground({
       content: text,
       type: isLink ? 'url' : 'text',
-      category: isLink ? 'links' : 'general',
+      category: typeof detectCategory === 'function' ? detectCategory(text, isLink ? 'url' : 'text') : (isLink ? 'links' : 'general'),
       title: document.title,
       source: location.href,
     });
@@ -875,7 +936,7 @@
       if (text && text.length > 0) {
         if (text !== lastSelectionText || !isVisible) {
           lastSelectionText = text;
-          if (!widget) createWidget();
+          ensureWidget();
           const s = shadow();
           if (!s) return;
           showPill(text);
@@ -894,40 +955,6 @@
       }
     }, 60);
   });
-
-  // Click on pill → expand to panel
-  document.addEventListener('click', (e) => {
-    if (!widget) return;
-  });
-
-  // Double-click on pill was the old way; now just clicking save pill expands
-  // So we add a click on the pill label to expand
-  function setupPillExpand() {
-    const s = shadow();
-    if (!s) return;
-    const pillLabel = s.getElementById('croxync-pill-label');
-    if (pillLabel) {
-      pillLabel.style.cursor = 'pointer';
-      pillLabel.addEventListener('click', () => {
-        const text = getSelectedText();
-        if (text) {
-          showPanel(text);
-          positionNearSelection();
-        }
-      });
-    }
-  }
-
-  // Re-setup events when widget is created
-  const origCreateWidget = createWidget;
-  const _createWidget = createWidget;
-  createWidget = function() {
-    _createWidget();
-    setupPillExpand();
-  };
-
-  // Also add mouseup on pill to expand
-  // We'll handle this in the creation
 
   document.addEventListener('mousedown', (e) => {
     if (widget && widget.contains(e.target)) return;
@@ -952,12 +979,474 @@
     }
   });
 
-  // Setup the pill label click after initial creation
-  setTimeout(() => {
-    if (widget) setupPillExpand();
-  }, 100);
+// === Auto-save on copy + URL popup + site detection ===
+  let lastCopiedContent = '';
+
+  function handleCopiedText(text) {
+    if (!text || text.length < 2 || text === lastCopiedContent) return;
+    const copiedIsUrl = isUrl(text);
+
+    chrome.storage.sync.get(['croxyncCode', 'autoSave', 'autoPasteUrl'], (settings) => {
+      if (!settings.croxyncCode) return;
+
+      let shouldSave = false;
+      if (copiedIsUrl && settings.autoPasteUrl !== false) shouldSave = true;
+      else if (!copiedIsUrl && settings.autoSave === true) shouldSave = true;
+
+      if (shouldSave) {
+        lastCopiedContent = text;
+        setTimeout(() => { lastCopiedContent = ''; }, 5000);
+
+        const category = typeof detectCategory === 'function' ? detectCategory(text, copiedIsUrl ? 'url' : 'text') : (copiedIsUrl ? 'links' : 'general');
+        const siteInfo = getSiteInfo(text);
+
+        chrome.runtime.sendMessage({
+          type: 'AUTO_SAVE_CLIP',
+          data: {
+            content: text,
+            type: copiedIsUrl ? 'url' : 'text',
+            category: category,
+            title: siteInfo.title || document.title,
+            source: location.href,
+          },
+        }, (response) => {
+          if (response && response.success && !response.dedup) {
+            showToast(copiedIsUrl ? 'Link auto-synced!' : 'Copied & synced!', 'success', copiedIsUrl);
+            showSyncIndicator(copiedIsUrl ? 'Link synced' : 'Clip synced');
+            if (copiedIsUrl) flashLinkSaved();
+          }
+        });
+      }
+
+      // Always show URL popup for URLs when autoPasteUrl is on
+      if (copiedIsUrl && settings.autoPasteUrl !== false) {
+        showSitePopup(text);
+      }
+    });
+  }
+
+  // Method 1: copy event for in-page text selection
+  document.addEventListener('copy', () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel ? sel.toString().trim() : '';
+      if (text) {
+        handleCopiedText(text);
+        return;
+      }
+      // Selection was cleared by copy — try clipboard
+      navigator.clipboard.readText().then((clipText) => {
+        handleCopiedText(clipText.trim());
+      }).catch(() => {});
+    }, 100);
+  });
+
+  // Method 2: keydown Ctrl+C without selection context (address bar copy, etc.)
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      setTimeout(() => {
+        if (lastCopiedContent) return; // Already handled by copy event
+        navigator.clipboard.readText().then((text) => {
+          handleCopiedText(text.trim());
+        }).catch(() => {});
+      }, 150);
+    }
+  });
+
+  // Method 3: right-click copy
+  document.addEventListener('contextmenu', () => {
+    setTimeout(() => {
+      navigator.clipboard.readText().then((text) => {
+        if (isUrl(text.trim())) {
+          handleCopiedText(text.trim());
+        }
+      }).catch(() => {});
+    }, 300);
+  });
+
+  function getSiteInfo(url) {
+    try {
+      const u = new URL(url);
+      const host = u.hostname;
+      const info = { title: null, type: 'url' };
+
+      if (host.includes('youtube.com') || host.includes('youtu.be')) {
+        const vid = u.searchParams.get('v') || (host.includes('youtu.be') ? u.pathname.slice(1) : null);
+        if (vid) {
+          info.title = 'YouTube: ' + (document.title.replace(/\s*[-|].*$/, '').trim() || vid);
+          info.type = 'youtube';
+        }
+      } else if (host.includes('github.com')) {
+        const parts = u.pathname.split('/').filter(Boolean);
+        if (parts.length >= 2) {
+          info.title = 'GitHub: ' + parts[0] + '/' + parts[1];
+          info.type = 'github';
+        }
+      } else if (host.includes('twitter.com') || host.includes('x.com')) {
+        info.title = 'X/Twitter post';
+        info.type = 'twitter';
+      } else if (host.includes('reddit.com')) {
+        info.title = 'Reddit: ' + u.pathname.split('/').filter(Boolean).slice(-1)[0];
+        info.type = 'reddit';
+      } else if (host.includes('stackoverflow.com')) {
+        info.title = 'Stack Overflow';
+        info.type = 'stackoverflow';
+      } else if (host.includes('medium.com')) {
+        info.title = 'Medium article';
+        info.type = 'medium';
+      } else if (host.includes('figma.com')) {
+        info.title = 'Figma';
+        info.type = 'figma';
+      } else if (host.includes('notion.so') || host.includes('notion.site')) {
+        info.title = 'Notion page';
+        info.type = 'notion';
+      }
+
+      return info;
+    } catch { return { title: null, type: 'url' }; }
+  }
+
+  // === Site-specific popups ===
+  let sitePopup = null;
+
+  function getSiteIcon(type) {
+    const icons = {
+      youtube: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="4" fill="#ff0000"/><path d="M10 8l6 4-6 4V8z" fill="white"/></svg>',
+      github: '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>',
+      twitter: '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+      reddit: '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10" fill="#ff4500"/><circle cx="9" cy="13" r="1.5" fill="white"/><circle cx="15" cy="13" r="1.5" fill="white"/><path d="M8 16c1 1.5 2.5 2 4 2s3-.5 4-2" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>',
+      stackoverflow: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15.725 0l-1.72 2.143 5.895 4.714 1.72-2.143zM4.5 14.25l6.75 3.75 6.75-3.75M4.5 18l6.75 3.75L18 18" stroke="#f48024" stroke-width="2"/><rect x="3" y="12" width="18" height="3" rx="0.5" fill="#bcbbbb"/></svg>',
+      figma: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="4" fill="#a259ff"/><rect x="13" y="3" width="8" height="8" rx="4" fill="#f24e1e"/><rect x="3" y="13" width="8" height="8" rx="4" fill="#1abcfe"/><path d="M13 17a4 4 0 014-4h-4v4z" fill="#0acf83"/></svg>',
+    };
+    return icons[type] || '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
+  }
+
+  function getSiteColor(type) {
+    const colors = {
+      youtube: '#ff0000',
+      github: '#333',
+      twitter: '#1da1f2',
+      reddit: '#ff4500',
+      stackoverflow: '#f48024',
+      medium: '#000',
+      figma: '#a259ff',
+      notion: '#000',
+    };
+    return colors[type] || '#6366f1';
+  }
+
+  function showSitePopup(url) {
+    if (sitePopup) return;
+
+    const siteInfo = getSiteInfo(url);
+    const siteType = siteInfo.type;
+    const color = getSiteColor(siteType);
+    const icon = getSiteIcon(siteType);
+    const truncated = url.length > 45 ? url.slice(0, 45) + '...' : url;
+    const label = {
+      youtube: 'Video saved!',
+      github: 'Repo saved!',
+      twitter: 'Post saved!',
+      reddit: 'Post saved!',
+      stackoverflow: 'Answer saved!',
+      medium: 'Article saved!',
+      figma: 'Design saved!',
+      notion: 'Page saved!',
+      url: 'Link saved!',
+    }[siteType] || 'Link saved!';
+
+    sitePopup = document.createElement('div');
+    sitePopup.id = 'croxync-site-popup';
+
+    sitePopup.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;">
+        <div style="flex-shrink:0;width:40px;height:40px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px ${color}40;">
+          ${icon}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">${label}</div>
+          <div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin-top:2px;">${truncated}</div>
+        </div>
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:4px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span style="font-size:11px;color:#4ade80;font-weight:600;">Synced</span>
+        </div>
+      </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      #croxync-site-popup {
+        position: fixed;
+        bottom: 28px;
+        right: 28px;
+        z-index: 2147483646;
+        background: #0f172a;
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
+        min-width: 300px;
+        max-width: 420px;
+        animation: croxync-site-slide 0.3s cubic-bezier(0.16,1,0.3,1);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        backdrop-filter: blur(12px);
+      }
+      @keyframes croxync-site-slide {
+        0% { opacity:0; transform:translateY(16px) scale(0.96); }
+        100% { opacity:1; transform:translateY(0) scale(1); }
+      }
+      @keyframes croxync-site-out {
+        0% { opacity:1; transform:translateY(0) scale(1); }
+        100% { opacity:0; transform:translateY(12px) scale(0.96); }
+      }
+    `;
+    sitePopup.appendChild(style);
+    document.body.appendChild(sitePopup);
+
+    setTimeout(function() {
+      dismissSitePopup();
+    }, 2500);
+  }
+
+  function dismissSitePopup() {
+    if (!sitePopup) return;
+    sitePopup.style.animation = 'croxync-site-out 0.2s ease-in forwards';
+    var popup = sitePopup;
+    setTimeout(function() {
+      if (popup.parentNode) popup.parentNode.removeChild(popup);
+    }, 200);
+    sitePopup = null;
+  }
+
+  // Obsolete: showUrlPopup is now showSitePopup (replaced above)
+  // showUrlPopup kept as alias for compatibility
+  function showUrlPopup(url) { showSitePopup(url); }
 
   chrome.runtime.onMessage.addListener((msg) => {
     // Future: handle messages from background
   });
+
+  // === Site-specific auto-popups ===
+  // YouTube video detection
+  function isYouTubeVideoPage() {
+    return location.hostname.includes('youtube.com') && location.pathname === '/watch' && new URLSearchParams(location.search).get('v');
+  }
+
+  function getYouTubeVideoId() {
+    return new URLSearchParams(location.search).get('v');
+  }
+
+  function getYouTubeVideoTitle() {
+    var titleEl = document.querySelector('ytd-watch-metadata h1') || document.querySelector('h1.ytd-watch-metadata') || document.querySelector('h1.title');
+    return titleEl ? titleEl.textContent.trim() : document.title.replace(/\s*[-|].*$/, '').trim();
+  }
+
+  let ytBannerDismissed = false;
+  let ytBanner = null;
+
+  function showYouTubeBanner() {
+    if (ytBannerDismissed || ytBanner) return;
+
+    ytBanner = document.createElement('div');
+    ytBanner.id = 'croxync-yt-banner';
+
+    var videoId = getYouTubeVideoId();
+    var videoUrl = 'https://www.youtube.com/watch?v=' + videoId;
+    var videoTitle = getYouTubeVideoTitle();
+
+    ytBanner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;">
+        <div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#ff0000,#cc0000);display:flex;align-items:center;justify-content:center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this video?</div>
+          <div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${videoTitle}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button id="croxync-yt-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;transition:filter 0.15s;">Save</button>
+          <button id="croxync-yt-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;transition:all 0.15s;">Later</button>
+        </div>
+      </div>
+    `;
+
+    var style = document.createElement('style');
+    style.textContent = `
+      #croxync-yt-banner {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        z-index: 2147483646;
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 14px;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        min-width: 320px;
+        max-width: 400px;
+        animation: croxync-yt-slide 0.25s ease-out;
+      }
+      #croxync-yt-save:hover { filter: brightness(1.1); }
+      #croxync-yt-dismiss:hover { background: #1e293b; color: #e2e8f0; }
+      @keyframes croxync-yt-slide {
+        0% { opacity:0; transform:translateX(20px); }
+        100% { opacity:1; transform:translateX(0); }
+      }
+      @keyframes croxync-yt-out {
+        0% { opacity:1; transform:translateX(0); }
+        100% { opacity:0; transform:translateX(20px); }
+      }
+    `;
+    ytBanner.appendChild(style);
+
+    document.body.appendChild(ytBanner);
+
+    ytBanner.querySelector('#croxync-yt-save').addEventListener('click', function() {
+      sendToBackground({
+        content: videoUrl,
+        type: 'url',
+        category: 'links',
+        title: videoTitle,
+        source: location.href,
+      });
+      dismissYtBanner();
+    });
+
+    ytBanner.querySelector('#croxync-yt-dismiss').addEventListener('click', function() {
+      dismissYtBanner();
+    });
+  }
+
+  function dismissYtBanner() {
+    if (!ytBanner) return;
+    ytBanner.style.animation = 'croxync-yt-out 0.2s ease-in forwards';
+    var banner = ytBanner;
+    setTimeout(function() {
+      if (banner.parentNode) banner.parentNode.removeChild(banner);
+    }, 200);
+    ytBanner = null;
+    ytBannerDismissed = true;
+    setTimeout(function() { ytBannerDismissed = false; }, 600000);
+  }
+
+  // GitHub repo detection
+  function isGitHubRepoPage() {
+    return location.hostname === 'github.com' && /^\/[^/]+\/[^/]+/.test(location.pathname);
+  }
+
+  let ghBannerDismissed = false;
+  let ghBanner = null;
+
+  function showGitHubBanner() {
+    if (ghBannerDismissed || ghBanner) return;
+
+    var repoPath = location.pathname.split('/').slice(0, 3).join('/');
+    var repoUrl = location.origin + repoPath;
+    var repoName = location.pathname.split('/').slice(1, 3).join('/');
+
+    ghBanner = document.createElement('div');
+    ghBanner.id = 'croxync-gh-banner';
+
+    ghBanner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;">
+        <div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#24292e,#40464d);display:flex;align-items:center;justify-content:center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this repo?</div>
+          <div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${repoName}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button id="croxync-gh-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;">Save</button>
+          <button id="croxync-gh-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;">Later</button>
+        </div>
+      </div>
+    `;
+
+    var style = document.createElement('style');
+    style.textContent = `
+      #croxync-gh-banner {
+        position: fixed;
+        top: 70px;
+        right: 20px;
+        z-index: 2147483646;
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 14px;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        min-width: 300px;
+        max-width: 400px;
+        animation: croxync-gh-slide 0.25s ease-out;
+      }
+      #croxync-gh-save:hover { filter: brightness(1.1); }
+      #croxync-gh-dismiss:hover { background: #1e293b; color: #e2e8f0; }
+      @keyframes croxync-gh-slide {
+        0% { opacity:0; transform:translateX(20px); }
+        100% { opacity:1; transform:translateX(0); }
+      }
+      @keyframes croxync-gh-out {
+        0% { opacity:1; transform:translateX(0); }
+        100% { opacity:0; transform:translateX(20px); }
+      }
+    `;
+    ghBanner.appendChild(style);
+    document.body.appendChild(ghBanner);
+
+    ghBanner.querySelector('#croxync-gh-save').addEventListener('click', function() {
+      sendToBackground({
+        content: repoUrl,
+        type: 'url',
+        category: 'links',
+        title: 'GitHub: ' + repoName,
+        source: location.href,
+      });
+      dismissGhBanner();
+    });
+
+    ghBanner.querySelector('#croxync-gh-dismiss').addEventListener('click', function() {
+      dismissGhBanner();
+    });
+  }
+
+  function dismissGhBanner() {
+    if (!ghBanner) return;
+    ghBanner.style.animation = 'croxync-gh-out 0.2s ease-in forwards';
+    var banner = ghBanner;
+    setTimeout(function() {
+      if (banner.parentNode) banner.parentNode.removeChild(banner);
+    }, 200);
+    ghBanner = null;
+    ghBannerDismissed = true;
+    setTimeout(function() { ghBannerDismissed = false; }, 600000);
+  }
+
+  // Trigger site-specific banners
+  if (isYouTubeVideoPage()) {
+    setTimeout(showYouTubeBanner, 1500);
+  }
+
+  if (isGitHubRepoPage()) {
+    setTimeout(showGitHubBanner, 1500);
+  }
+
+  // Detect SPA navigation
+  var lastUrl = location.href;
+  setInterval(function() {
+    if (location.href !== lastUrl) {
+      lastUrl = location.href;
+      ytBannerDismissed = false;
+      ghBannerDismissed = false;
+
+      if (ytBanner && ytBanner.parentNode) { ytBanner.parentNode.removeChild(ytBanner); ytBanner = null; }
+      if (ghBanner && ghBanner.parentNode) { ghBanner.parentNode.removeChild(ghBanner); ghBanner = null; }
+
+      if (isYouTubeVideoPage()) {
+        setTimeout(showYouTubeBanner, 1500);
+      }
+      if (isGitHubRepoPage()) {
+        setTimeout(showGitHubBanner, 1500);
+      }
+    }
+  }, 1000);
 })();

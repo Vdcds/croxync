@@ -1,18 +1,18 @@
 const DEFAULT_API_URL = 'http://localhost:3000';
 
+let lastAutoContent = '';
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'croxync-save-selection',
     title: 'Save to Croxync',
     contexts: ['selection'],
   });
-
   chrome.contextMenus.create({
     id: 'croxync-save-link',
     title: 'Save Link to Croxync',
     contexts: ['link'],
   });
-
   chrome.contextMenus.create({
     id: 'croxync-save-page',
     title: 'Save Page URL to Croxync',
@@ -22,8 +22,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const { croxyncApiUrl, croxyncCode } = await chrome.storage.sync.get([
-    'croxyncApiUrl',
-    'croxyncCode',
+    'croxyncApiUrl', 'croxyncCode',
   ]);
 
   const apiUrl = (croxyncApiUrl || DEFAULT_API_URL).replace(/\/$/, '');
@@ -37,10 +36,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let data;
 
   if (info.menuItemId === 'croxync-save-selection' && info.selectionText) {
+    const content = info.selectionText.trim();
     data = {
-      content: info.selectionText.trim(),
-      type: isUrl(info.selectionText.trim()) ? 'url' : 'text',
-      category: isUrl(info.selectionText.trim()) ? 'links' : 'general',
+      content: content,
+      type: isUrl(content) ? 'url' : 'text',
+      category: isUrl(content) ? 'links' : detectCategorySimple(content),
       title: tab?.title || null,
       source: tab?.url || null,
     };
@@ -75,19 +75,36 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// Handle messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SAVE_CLIP') {
     handleSaveFromContent(message.data, sender.tab)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
-    return true; // keep channel open for async response
+    return true;
   }
 
-  if (message.type === 'CLIPBOARD_COPY') {
-    handleClipboardCopy(message.data, sender.tab)
-      .then(result => sendResponse(result))
-      .catch(err => sendResponse({ success: false }));
+  if (message.type === 'AUTO_SAVE_CLIP') {
+    const contentKey = message.data.content?.trim();
+    if (contentKey && contentKey === lastAutoContent) {
+      sendResponse({ success: true, dedup: true });
+      return true;
+    }
+    lastAutoContent = contentKey;
+    setTimeout(() => { lastAutoContent = ''; }, 5000);
+
+    handleSaveFromContent(message.data, sender.tab)
+      .then(result => {
+        if (result.success) {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon128.png',
+            title: 'Croxync',
+            message: message.data.type === 'url' ? 'Link auto-synced!' : 'Clip auto-synced!',
+          });
+        }
+        sendResponse(result);
+      })
+      .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 });
@@ -107,7 +124,7 @@ async function handleSaveFromContent(data, tab) {
   const result = await sendClip(apiUrl, croxyncCode, {
     content: data.content,
     type: data.type || (isUrl(data.content) ? 'url' : 'text'),
-    category: data.category || (isUrl(data.content) ? 'links' : 'general'),
+    category: data.category || detectCategorySimple(data.content) || (data.type === 'url' ? 'links' : 'general'),
     title: data.title || tab?.title || null,
     source: data.source || tab?.url || null,
   });
@@ -118,37 +135,6 @@ async function handleSaveFromContent(data, tab) {
       iconUrl: 'icons/icon128.png',
       title: 'Croxync',
       message: 'Clip synced!',
-    });
-  }
-
-  return result;
-}
-
-async function handleClipboardCopy(content, tab) {
-  const { croxyncApiUrl, croxyncCode, autoSave } = await chrome.storage.sync.get([
-    'croxyncApiUrl',
-    'croxyncCode',
-    'autoSave',
-  ]);
-
-  if (!croxyncCode || autoSave === false) return { success: false };
-
-  const apiUrl = (croxyncApiUrl || DEFAULT_API_URL).replace(/\/$/, '');
-
-  const result = await sendClip(apiUrl, croxyncCode, {
-    content: content.trim(),
-    type: isUrl(content.trim()) ? 'url' : 'text',
-    category: isUrl(content.trim()) ? 'links' : 'general',
-    title: tab?.title || null,
-    source: tab?.url || null,
-  });
-
-  if (result.success) {
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title: 'Croxync',
-      message: 'Auto-saved from copy',
     });
   }
 
@@ -192,4 +178,25 @@ function isUrl(text) {
   } catch {
     return false;
   }
+}
+
+function detectCategorySimple(text) {
+  if (isUrl(text.trim())) return 'links';
+  var lines = text.split('\n');
+  var codePatterns = [/\bfunction\b/, /\bclass\b/, /\bimport\b/, /\bconst\b.*=/, /\blet\b.*=/, /\breturn\b/, /\bdef\b/, /\basync\b/, /\binterface\b/, /\btype\b.*=/, /\bconsole\./, /\bdocument\./, /\{/, /\}/, /;/];
+  var matches = 0;
+  for (var i = 0; i < codePatterns.length; i++) {
+    if (codePatterns[i].test(text)) matches++;
+  }
+  if (matches >= 2) return 'code';
+  var bulletCount = 0;
+  var numberedCount = 0;
+  for (var j = 0; j < lines.length; j++) {
+    var t = lines[j].trim();
+    if (/^[-*•]\s/.test(t)) bulletCount++;
+    if (/^\d+[.)]\s/.test(t)) numberedCount++;
+  }
+  if (lines.length >= 2 && (bulletCount + numberedCount) / lines.length > 0.5) return 'lists';
+  if (lines.length >= 3 || text.length > 100) return 'notes';
+  return 'general';
 }

@@ -8,31 +8,38 @@
 </head>
 <body>
   <div class="container">
+    <!-- Header with code always visible -->
     <header>
       <div class="header-row">
-        <h1>Croxync</h1>
-        <span class="badge" id="status-indicator" title="Connected">●</span>
+        <div class="header-left">
+          <h1>Croxync</h1>
+          <span class="badge connected" id="status-indicator">●</span>
+        </div>
+        <div class="header-actions" id="header-actions">
+          <button class="icon-btn" id="refresh-btn" title="Refresh">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+          <button class="icon-btn" id="settings-btn" title="Settings">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
       </div>
-      <p class="subtitle">Select text on any page to save</p>
     </header>
 
-    <!-- Setup: generate or enter code -->
+    <!-- Setup section -->
     <div id="setup-section" class="section">
       <button id="generate-btn" class="btn btn-primary btn-large">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         Generate New Code
       </button>
-
       <div class="divider"><span>or join existing</span></div>
-
       <input type="text" id="user-code" placeholder="Enter code (e.g. ABC123)" maxlength="6" style="text-transform: uppercase">
       <input type="text" id="api-url" placeholder="Server URL (default: http://localhost:3000)" class="secondary-input">
-
       <button id="save-settings" class="btn btn-secondary">Connect</button>
       <div class="status" id="setup-status"></div>
     </div>
 
-    <!-- QR code display after generating -->
+    <!-- QR code section -->
     <div id="qr-section" class="section hidden">
       <div class="qr-card">
         <h3>Your Sync Code</h3>
@@ -44,51 +51,83 @@
       </div>
       <button id="qr-done-btn" class="btn btn-primary">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Done, Go to Extension
+        Done
       </button>
     </div>
 
-    <!-- Main: connected state -->
-    <div id="main-section" class="section hidden">
+    <!-- Settings overlay -->
+    <div id="settings-overlay" class="section hidden">
+      <div class="settings-header">
+        <h3>Settings</h3>
+        <button class="icon-btn" id="settings-close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
       <div class="code-display">
         <span>Code: <strong id="display-code"></strong></span>
         <div class="code-actions">
-          <button id="show-qr" class="btn btn-small" title="Show QR code">QR</button>
           <button id="change-code" class="btn btn-small">Change</button>
         </div>
       </div>
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="auto-save">
+          <span>Auto-save all copied text</span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <label class="toggle-label">
+          <input type="checkbox" id="auto-paste-url">
+          <span>Auto-paste copied URLs</span>
+        </label>
+      </div>
+      <button id="logout-btn" class="btn btn-danger">Disconnect</button>
+    </div>
 
-      <div id="qr-inline" class="qr-inline hidden">
-        <img id="qr-inline-image" alt="QR Code" />
-        <p class="qr-hint-inline">Scan on your phone</p>
+    <!-- Main: always shows code + QR at top -->
+    <div id="main-section" class="section hidden">
+      <!-- Sync code + QR always visible -->
+      <div class="sync-bar">
+        <div class="sync-code">
+          <span class="sync-label">Your code</span>
+          <strong id="display-code-main"></strong>
+        </div>
+        <img id="qr-mini" alt="QR" class="qr-mini" />
       </div>
 
-      <div class="paste-section">
-        <label>Quick paste</label>
-        <div class="paste-row">
-          <input type="text" id="paste-input" placeholder="Paste a link or text...">
-          <button id="paste-submit" class="btn btn-primary btn-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      <!-- Quick paste -->
+      <div class="paste-bar">
+        <select id="paste-category" class="paste-select">
+          <option value="general">Other</option>
+          <option value="links">Link</option>
+          <option value="code">Code</option>
+          <option value="notes">Note</option>
+          <option value="lists">List</option>
+        </select>
+        <input type="text" id="paste-input" placeholder="Paste a link or text...">
+        <div class="paste-bar-actions">
+          <button id="paste-submit" class="icon-btn icon-btn-primary" title="Save">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button id="save-url" class="icon-btn" title="Save current URL">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           </button>
         </div>
       </div>
 
-      <div class="quick-actions">
-        <button id="save-url" class="btn btn-secondary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Save Current URL
-        </button>
-        <button id="save-clipboard" class="btn btn-secondary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          Save Clipboard
-        </button>
+      <!-- Category tabs -->
+      <div class="cat-tabs" id="cat-tabs">
+        <button class="cat-tab active" data-cat="all">All</button>
+        <button class="cat-tab" data-cat="links">Links</button>
+        <button class="cat-tab" data-cat="code">Code</button>
+        <button class="cat-tab" data-cat="notes">Notes</button>
+        <button class="cat-tab" data-cat="lists">Lists</button>
+        <button class="cat-tab" data-cat="general">Other</button>
       </div>
 
-      <div class="toggle-row">
-        <label class="toggle-label">
-          <input type="checkbox" id="auto-save">
-          <span>Auto-save on copy (Ctrl+C)</span>
-        </label>
+      <!-- Clips list -->
+      <div class="clips-list" id="clips-list">
+        <div class="clips-empty">Loading...</div>
       </div>
 
       <div class="status" id="status"></div>

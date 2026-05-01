@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { detectCategory, detectType } from "@/lib/categories";
 import { NextRequest } from "next/server";
 
 const corsHeaders = {
@@ -75,8 +76,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const resolvedType = type || (isUrl(content) ? "url" : "text");
-    const resolvedCategory = category || (resolvedType === "url" ? "links" : "general");
+    const resolvedType = type || detectType(content);
+    const resolvedCategory = category || detectCategory(content, resolvedType);
 
     const clip = await prisma.clip.create({
       data: {
@@ -96,14 +97,5 @@ export async function POST(request: NextRequest) {
       { error: "Internal server error" },
       { status: 500, headers: corsHeaders }
     );
-  }
-}
-
-function isUrl(text: string): boolean {
-  try {
-    new URL(text);
-    return true;
-  } catch {
-    return false;
   }
 }
