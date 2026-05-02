@@ -561,10 +561,9 @@
     if (pillLabel) {
       pillLabel.style.cursor = 'pointer';
       pillLabel.addEventListener('click', function() {
-        var text = getSelectedText();
+        var text = lastSelectionText || getSelectedText();
         if (text) {
           showPanel(text);
-          positionNearSelection();
         }
       });
     }
@@ -810,59 +809,49 @@
   }
 
   function onPillSave() {
-    var text = getSelectedText();
+    var text = lastSelectionText || getSelectedText();
     if (!text) return;
     var isLink = isUrl(text);
-    sendToBackground({
+    var sent = sendToBackground({
       content: text,
       type: isLink ? 'url' : 'text',
       category: typeof detectCategory === 'function' ? detectCategory(text, isLink ? 'url' : 'text') : (isLink ? 'links' : 'general'),
       title: document.title,
       source: location.href,
     });
-    var s = shadow();
-    if (s) {
-      var btn = s.getElementById('croxync-pill-save');
-      btn.classList.add('saved');
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-      clearTimeout(savedPillTimeout);
-      savedPillTimeout = setTimeout(function() {
-        btn.classList.remove('saved');
-        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
-      }, 1500);
+    if (sent) {
+      hideWidget();
+    } else {
+      showToast('Already saved', 'error');
+      hideWidget();
     }
   }
 
   function onPanelSave() {
-    var text = getSelectedText();
+    var text = lastSelectionText || getSelectedText();
     if (!text) {
       showToast('Nothing selected', 'error');
       return;
     }
     var isLink = isUrl(text);
     var category = getActiveCategory();
-    sendToBackground({
+    var sent = sendToBackground({
       content: text,
       type: isLink ? 'url' : 'text',
       category: category,
       title: document.title,
       source: location.href,
     });
-
-    var s = shadow();
-    if (s) {
-      var saveBtn = s.getElementById('croxync-save-btn');
-      saveBtn.classList.add('saved');
-      saveBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Saved!';
-      setTimeout(function() {
-        saveBtn.classList.remove('saved');
-        saveBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Save';
-      }, 1500);
+    if (sent) {
+      hideWidget();
+    } else {
+      showToast('Already saved', 'error');
+      hideWidget();
     }
   }
 
   function onCopyAndSave() {
-    var text = getSelectedText();
+    var text = lastSelectionText || getSelectedText();
     if (!text) {
       showToast('Nothing selected', 'error');
       return;
@@ -879,6 +868,7 @@
         source: location.href,
       });
       showToast('Copied & saved!', 'success', isLink);
+      hideWidget();
     }).catch(function() {
       sendToBackground({
         content: text,
@@ -887,6 +877,7 @@
         title: document.title,
         source: location.href,
       });
+      hideWidget();
     });
   }
 
@@ -907,6 +898,7 @@
       source: location.href,
     });
     input.value = '';
+    hideWidget();
   }
 
   function isUrl(text) {
@@ -933,7 +925,8 @@
   var selectionDebounce = null;
   var lastSelectionText = '';
 
-  document.addEventListener('mouseup', function() {
+  document.addEventListener('mouseup', function(e) {
+    if (isInsideWidget(e)) return;
     clearTimeout(selectionDebounce);
     selectionDebounce = setTimeout(function() {
       var text = getSelectedText();
@@ -1035,6 +1028,7 @@
     if (text && text.length >= 2) {
       handleCopiedText(text);
     }
+    hideWidget();
   });
 
   // Keydown Ctrl/Cmd+C fallback for address bar copies
@@ -1054,6 +1048,7 @@
           }
         }).catch(function() {});
       }
+      hideWidget();
     }, 100);
   });
 
@@ -1285,12 +1280,110 @@
     setTimeout(function() { ghBannerDismissed = false; }, 600000);
   }
 
+  // === Twitter/X banner ===
+  function isTwitterPostPage() {
+    return (location.hostname.includes('twitter.com') || location.hostname.includes('x.com')) && /\/status\/\d+/.test(location.pathname);
+  }
+
+  var twBannerDismissed = false;
+  var twBanner = null;
+
+  function showTwitterBanner() {
+    if (twBannerDismissed || twBanner) return;
+
+    var postUrl = location.href;
+    var postTitle = document.title.replace(/\s*[-|].*$/, '').trim() || 'X post';
+
+    twBanner = document.createElement('div');
+    twBanner.id = 'croxync-tw-banner';
+    twBanner.innerHTML = '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;"><div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#1da1f2,#0d8ecf);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></div><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this post?</div><div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">' + postTitle + '</div></div><div style="display:flex;gap:6px;flex-shrink:0;"><button id="croxync-tw-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;transition:filter 0.15s;">Save</button><button id="croxync-tw-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;transition:all 0.15s;">Later</button></div></div>';
+
+    var style = document.createElement('style');
+    style.textContent = '#croxync-tw-banner{position:fixed;top:70px;right:20px;z-index:2147483646;background:#0f172a;border:1px solid #1e293b;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.05);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;min-width:320px;max-width:400px;animation:croxync-tw-slide 0.25s ease-out;}#croxync-tw-save:hover{filter:brightness(1.1)}#croxync-tw-dismiss:hover{background:#1e293b;color:#e2e8f0}@keyframes croxync-tw-slide{0%{opacity:0;transform:translateX(20px)}100%{opacity:1;transform:translateX(0)}}@keyframes croxync-tw-out{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(20px)}}';
+    twBanner.appendChild(style);
+    document.body.appendChild(twBanner);
+
+    twBanner.querySelector('#croxync-tw-save').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      sendToBackground({ content: postUrl, type: 'url', category: 'links', title: 'X: ' + postTitle, source: location.href });
+      dismissTwitterBanner();
+    }, true);
+    twBanner.querySelector('#croxync-tw-dismiss').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      dismissTwitterBanner();
+    }, true);
+  }
+
+  function dismissTwitterBanner() {
+    if (!twBanner) return;
+    twBanner.style.animation = 'croxync-tw-out 0.2s ease-in forwards';
+    var banner = twBanner;
+    setTimeout(function() { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 200);
+    twBanner = null;
+    twBannerDismissed = true;
+    setTimeout(function() { twBannerDismissed = false; }, 600000);
+  }
+
+  // === Reddit banner ===
+  function isRedditPostPage() {
+    return location.hostname.includes('reddit.com') && /^\/r\/[^/]+\/comments\//.test(location.pathname);
+  }
+
+  var rdBannerDismissed = false;
+  var rdBanner = null;
+
+  function showRedditBanner() {
+    if (rdBannerDismissed || rdBanner) return;
+
+    var postUrl = location.href;
+    var postTitle = document.title.replace(/\s*[-|].*$/, '').trim() || 'Reddit post';
+
+    rdBanner = document.createElement('div');
+    rdBanner.id = 'croxync-rd-banner';
+    rdBanner.innerHTML = '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;"><div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#ff4500,#cc3700);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><circle cx="12" cy="12" r="10" fill="#ff4500"/><circle cx="9" cy="13" r="1.5" fill="white"/><circle cx="15" cy="13" r="1.5" fill="white"/><path d="M8 16c1 1.5 2.5 2 4 2s3-.5 4-2" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this post?</div><div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">' + postTitle + '</div></div><div style="display:flex;gap:6px;flex-shrink:0;"><button id="croxync-rd-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;transition:filter 0.15s;">Save</button><button id="croxync-rd-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;transition:all 0.15s;">Later</button></div></div>';
+
+    var style = document.createElement('style');
+    style.textContent = '#croxync-rd-banner{position:fixed;top:70px;right:20px;z-index:2147483646;background:#0f172a;border:1px solid #1e293b;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.05);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;min-width:320px;max-width:400px;animation:croxync-rd-slide 0.25s ease-out;}#croxync-rd-save:hover{filter:brightness(1.1)}#croxync-rd-dismiss:hover{background:#1e293b;color:#e2e8f0}@keyframes croxync-rd-slide{0%{opacity:0;transform:translateX(20px)}100%{opacity:1;transform:translateX(0)}}@keyframes croxync-rd-out{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(20px)}}';
+    rdBanner.appendChild(style);
+    document.body.appendChild(rdBanner);
+
+    rdBanner.querySelector('#croxync-rd-save').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      sendToBackground({ content: postUrl, type: 'url', category: 'links', title: 'Reddit: ' + postTitle, source: location.href });
+      dismissRedditBanner();
+    }, true);
+    rdBanner.querySelector('#croxync-rd-dismiss').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      dismissRedditBanner();
+    }, true);
+  }
+
+  function dismissRedditBanner() {
+    if (!rdBanner) return;
+    rdBanner.style.animation = 'croxync-rd-out 0.2s ease-in forwards';
+    var banner = rdBanner;
+    setTimeout(function() { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 200);
+    rdBanner = null;
+    rdBannerDismissed = true;
+    setTimeout(function() { rdBannerDismissed = false; }, 600000);
+  }
+
   // Trigger site-specific banners
   if (isYouTubeVideoPage()) {
     setTimeout(showYouTubeBanner, 1500);
   }
   if (isGitHubRepoPage()) {
     setTimeout(showGitHubBanner, 1500);
+  }
+  if (isTwitterPostPage()) {
+    setTimeout(showTwitterBanner, 1500);
+  }
+  if (isRedditPostPage()) {
+    setTimeout(showRedditBanner, 1500);
   }
 
   // Detect SPA navigation
@@ -1300,10 +1393,16 @@
       lastUrl = location.href;
       ytBannerDismissed = false;
       ghBannerDismissed = false;
+      twBannerDismissed = false;
+      rdBannerDismissed = false;
       if (ytBanner && ytBanner.parentNode) { ytBanner.parentNode.removeChild(ytBanner); ytBanner = null; }
       if (ghBanner && ghBanner.parentNode) { ghBanner.parentNode.removeChild(ghBanner); ghBanner = null; }
+      if (twBanner && twBanner.parentNode) { twBanner.parentNode.removeChild(twBanner); twBanner = null; }
+      if (rdBanner && rdBanner.parentNode) { rdBanner.parentNode.removeChild(rdBanner); rdBanner = null; }
       if (isYouTubeVideoPage()) setTimeout(showYouTubeBanner, 1500);
       if (isGitHubRepoPage()) setTimeout(showGitHubBanner, 1500);
+      if (isTwitterPostPage()) setTimeout(showTwitterBanner, 1500);
+      if (isRedditPostPage()) setTimeout(showRedditBanner, 1500);
     }
   }, 1000);
 })();
