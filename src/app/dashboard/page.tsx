@@ -120,11 +120,11 @@ function DashboardContent() {
         const res = await fetch("/api/clips", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            code, 
-            content: url.trim(), 
+          body: JSON.stringify({
+            code,
+            content: url.trim(),
             type: "url",
-            category: "links" 
+            category: "links"
           }),
         });
         const data = await res.json();
@@ -139,12 +139,12 @@ function DashboardContent() {
     function handleCopy(e: ClipboardEvent) {
       const selection = window.getSelection();
       const selectedText = selection?.toString()?.trim();
-      
+
       if (selectedText && isUrl(selectedText)) {
         // Show popup notification
         setCopyToast({ show: true, message: "Link copied & saved!" });
         setTimeout(() => setCopyToast({ show: false, message: "" }), 2500);
-        
+
         // Save the URL to clips
         saveUrlClip(selectedText);
       }
@@ -157,7 +157,7 @@ function DashboardContent() {
   async function copyToClipboard(content: string, id: string) {
     const isUrl = content.startsWith("http://") || content.startsWith("https://");
     const toastMessage = isUrl ? "URL copied to clipboard!" : "Copied to clipboard!";
-    
+
     try {
       await navigator.clipboard.writeText(content);
       setCopiedId(id);
@@ -266,7 +266,7 @@ function DashboardContent() {
   const qrUrl = typeof window !== "undefined" ? `${window.location.origin}/dashboard?code=${code}` : "";
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+    <main className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -363,7 +363,7 @@ function DashboardContent() {
           <Button
             onClick={pasteClip}
             disabled={saving || !pasteText.trim()}
-            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shrink-0"
+            className="bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shrink-0"
             size="sm"
           >
             <Send className="w-4 h-4 mr-1" />
@@ -433,7 +433,7 @@ function DashboardContent() {
                             <a href={clip.content} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline break-all flex-1">
                               {clip.content}
                             </a>
-                            <button 
+                            <button
                               onClick={(e) => { e.preventDefault(); copyToClipboard(clip.content, clip.id + "-url"); }}
                               className="shrink-0 p-1 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded transition-colors"
                               title="Copy URL"
@@ -466,7 +466,7 @@ function DashboardContent() {
                             )}
                           </div>
                         ) : (
-                          <p className="text-sm text-slate-300 whitespace-pre-wrap break-words">{clip.content}</p>
+                          <p className="text-sm text-slate-300 whitespace-pre-wrap wrap-break-words">{clip.content}</p>
                         )}
                       </div>
 
@@ -490,7 +490,7 @@ function DashboardContent() {
       {/* Copy Toast Popup */}
       {copyToast.show && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <div className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/20">
+          <div className="flex items-center gap-2 bg-linear-0-to-r from-cyan-500 to-blue-600 text-white px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/20">
             <CheckCircle className="w-4 h-4" />
             <span className="text-sm font-medium">{copyToast.message}</span>
           </div>
@@ -503,7 +503,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-center">
+      <main className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-center">
         <p className="text-slate-400">Loading...</p>
       </main>
     }>

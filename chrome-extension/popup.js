@@ -73,7 +73,6 @@ async function init() {
       document.getElementById('paste-input').value = clipText.trim();
       document.getElementById('paste-category').value = 'links';
     }
-
   } catch (e) {
     // Clipboard read may fail — that's fine
   }
