@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'https://croxync.vercel.app';
+const DEFAULT_API_URL = 'https://croxync-dhcc.vercel.app';
 
 let lastAutoContent = '';
 
