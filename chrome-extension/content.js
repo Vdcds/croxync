@@ -981,10 +981,25 @@
 
 // === Auto-save on copy + URL popup + site detection ===
   let lastCopiedContent = '';
+  let lastCopiedTime = 0;
 
   function handleCopiedText(text) {
-    if (!text || text.length < 2 || text === lastCopiedContent) return;
-    const copiedIsUrl = isUrl(text);
+    if (!text || text.length < 2) return;
+    
+    const trimmedText = text.trim();
+    const now = Date.now();
+    
+    // Prevent duplicate processing within 2 seconds
+    if (trimmedText === lastCopiedContent && (now - lastCopiedTime) < 2000) return;
+    
+    const copiedIsUrl = isUrl(trimmedText);
+
+    // Always show URL popup for URLs when copied - this provides visual feedback
+    if (copiedIsUrl) {
+      showSitePopup(trimmedText);
+      lastCopiedContent = trimmedText;
+      lastCopiedTime = now;
+    }
 
     chrome.storage.sync.get(['croxyncCode', 'autoSave', 'autoPasteUrl'], (settings) => {
       if (!settings.croxyncCode) return;
@@ -994,22 +1009,23 @@
       else if (!copiedIsUrl && settings.autoSave === true) shouldSave = true;
 
       if (shouldSave) {
-        lastCopiedContent = text;
-        setTimeout(() => { lastCopiedContent = ''; }, 5000);
-
-        const category = typeof detectCategory === 'function' ? detectCategory(text, copiedIsUrl ? 'url' : 'text') : (copiedIsUrl ? 'links' : 'general');
-        const siteInfo = getSiteInfo(text);
+        const category = typeof detectCategory === 'function' ? detectCategory(trimmedText, copiedIsUrl ? 'url' : 'text') : (copiedIsUrl ? 'links' : 'general');
+        const siteInfo = getSiteInfo(trimmedText);
 
         chrome.runtime.sendMessage({
           type: 'AUTO_SAVE_CLIP',
           data: {
-            content: text,
+            content: trimmedText,
             type: copiedIsUrl ? 'url' : 'text',
             category: category,
             title: siteInfo.title || document.title,
             source: location.href,
           },
         }, (response) => {
+          if (chrome.runtime.lastError) {
+            // Extension context invalidated or not ready
+            return;
+          }
           if (response && response.success && !response.dedup) {
             showToast(copiedIsUrl ? 'Link auto-synced!' : 'Copied & synced!', 'success', copiedIsUrl);
             showSyncIndicator(copiedIsUrl ? 'Link synced' : 'Clip synced');
@@ -1017,51 +1033,27 @@
           }
         });
       }
-
-      // Always show URL popup for URLs when autoPasteUrl is on
-      if (copiedIsUrl && settings.autoPasteUrl !== false) {
-        showSitePopup(text);
-      }
     });
   }
 
-  // Method 1: copy event for in-page text selection
-  document.addEventListener('copy', () => {
+  // Single copy event handler - most reliable method
+  document.addEventListener('copy', (e) => {
+    // Get the selected text before it's cleared
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString().trim() : '';
+    
     setTimeout(() => {
-      const sel = window.getSelection();
-      const text = sel ? sel.toString().trim() : '';
-      if (text) {
-        handleCopiedText(text);
-        return;
-      }
-      // Selection was cleared by copy — try clipboard
-      navigator.clipboard.readText().then((clipText) => {
-        handleCopiedText(clipText.trim());
-      }).catch(() => {});
-    }, 100);
-  });
-
-  // Method 2: keydown Ctrl+C without selection context (address bar copy, etc.)
-  document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-      setTimeout(() => {
-        if (lastCopiedContent) return; // Already handled by copy event
-        navigator.clipboard.readText().then((text) => {
-          handleCopiedText(text.trim());
+      // First try selected text, if empty try clipboard
+      if (selectedText && selectedText.length >= 2) {
+        handleCopiedText(selectedText);
+      } else {
+        navigator.clipboard.readText().then((clipText) => {
+          if (clipText && clipText.trim().length >= 2) {
+            handleCopiedText(clipText);
+          }
         }).catch(() => {});
-      }, 150);
-    }
-  });
-
-  // Method 3: right-click copy
-  document.addEventListener('contextmenu', () => {
-    setTimeout(() => {
-      navigator.clipboard.readText().then((text) => {
-        if (isUrl(text.trim())) {
-          handleCopiedText(text.trim());
-        }
-      }).catch(() => {});
-    }, 300);
+      }
+    }, 50);
   });
 
   function getSiteInfo(url) {
@@ -1136,7 +1128,10 @@
   }
 
   function showSitePopup(url) {
-    if (sitePopup) return;
+    // Dismiss any existing popup first
+    if (sitePopup) {
+      dismissSitePopup();
+    }
 
     const siteInfo = getSiteInfo(url);
     const siteType = siteInfo.type;
@@ -1144,19 +1139,38 @@
     const icon = getSiteIcon(siteType);
     const truncated = url.length > 45 ? url.slice(0, 45) + '...' : url;
     const label = {
-      youtube: 'Video saved!',
-      github: 'Repo saved!',
-      twitter: 'Post saved!',
-      reddit: 'Post saved!',
-      stackoverflow: 'Answer saved!',
-      medium: 'Article saved!',
-      figma: 'Design saved!',
-      notion: 'Page saved!',
-      url: 'Link saved!',
-    }[siteType] || 'Link saved!';
+      youtube: 'Video copied!',
+      github: 'Repo copied!',
+      twitter: 'Post copied!',
+      reddit: 'Post copied!',
+      stackoverflow: 'Answer copied!',
+      medium: 'Article copied!',
+      figma: 'Design copied!',
+      notion: 'Page copied!',
+      url: 'Link copied!',
+    }[siteType] || 'Link copied!';
 
+    // Create the popup element
     sitePopup = document.createElement('div');
     sitePopup.id = 'croxync-site-popup';
+    
+    // Apply all styles directly to the element
+    sitePopup.style.cssText = `
+      position: fixed !important;
+      bottom: 28px !important;
+      right: 28px !important;
+      z-index: 2147483647 !important;
+      background: #0f172a !important;
+      border: 1px solid rgba(255,255,255,0.08) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04) !important;
+      min-width: 300px !important;
+      max-width: 420px !important;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      backdrop-filter: blur(12px) !important;
+      animation: croxync-site-slide 0.3s cubic-bezier(0.16,1,0.3,1) !important;
+      pointer-events: auto !important;
+    `;
 
     sitePopup.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;">
@@ -1169,38 +1183,30 @@
         </div>
         <div style="flex-shrink:0;display:flex;align-items:center;gap:4px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span style="font-size:11px;color:#4ade80;font-weight:600;">Synced</span>
+          <span style="font-size:11px;color:#4ade80;font-weight:600;">Copied</span>
         </div>
       </div>
     `;
 
-    const style = document.createElement('style');
-    style.textContent = `
-      #croxync-site-popup {
-        position: fixed;
-        bottom: 28px;
-        right: 28px;
-        z-index: 2147483646;
-        background: #0f172a;
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 16px;
-        box-shadow: 0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
-        min-width: 300px;
-        max-width: 420px;
-        animation: croxync-site-slide 0.3s cubic-bezier(0.16,1,0.3,1);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        backdrop-filter: blur(12px);
-      }
-      @keyframes croxync-site-slide {
-        0% { opacity:0; transform:translateY(16px) scale(0.96); }
-        100% { opacity:1; transform:translateY(0) scale(1); }
-      }
-      @keyframes croxync-site-out {
-        0% { opacity:1; transform:translateY(0) scale(1); }
-        100% { opacity:0; transform:translateY(12px) scale(0.96); }
-      }
-    `;
-    sitePopup.appendChild(style);
+    // Add animation keyframes to document head
+    const styleId = 'croxync-site-popup-styles';
+    let styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      styleEl.textContent = `
+        @keyframes croxync-site-slide {
+          0% { opacity:0; transform:translateY(16px) scale(0.96); }
+          100% { opacity:1; transform:translateY(0) scale(1); }
+        }
+        @keyframes croxync-site-out {
+          0% { opacity:1; transform:translateY(0) scale(1); }
+          100% { opacity:0; transform:translateY(12px) scale(0.96); }
+        }
+      `;
+      document.head.appendChild(styleEl);
+    }
+
     document.body.appendChild(sitePopup);
 
     setTimeout(function() {

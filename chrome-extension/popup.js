@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 const DEFAULT_API_URL = 'http://localhost:3000';
 
 let apiUrl = DEFAULT_API_URL;
@@ -71,6 +73,7 @@ async function init() {
       document.getElementById('paste-input').value = clipText.trim();
       document.getElementById('paste-category').value = 'links';
     }
+
   } catch (e) {
     // Clipboard read may fail — that's fine
   }

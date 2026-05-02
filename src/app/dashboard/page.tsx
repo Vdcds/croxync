@@ -8,7 +8,7 @@ import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardCopy, Trash2, ExternalLink, Copy, LogOut, RefreshCw, Clock, QrCode, X, Link2, Code, FileText, List, MoreHorizontal, Check, Plus, Send } from "lucide-react";
+import { ClipboardCopy, Trash2, ExternalLink, Copy, LogOut, RefreshCw, Clock, QrCode, X, Link2, Code, FileText, List, MoreHorizontal, Check, Plus, Send, CheckCircle } from "lucide-react";
 import { detectCategory } from "@/lib/categories";
 
 interface Clip {
@@ -60,6 +60,7 @@ function DashboardContent() {
   const [pasteCategory, setPasteCategory] = useState("general");
   const [pasteText, setPasteText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [copyToast, setCopyToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
 
   const fetchClips = useCallback(async (userCode: string) => {
     try {
@@ -101,11 +102,70 @@ function DashboardContent() {
     return () => clearInterval(interval);
   }, [code, fetchClips]);
 
+  // Global copy detection for URLs
+  useEffect(() => {
+    if (!code) return;
+
+    function isUrl(text: string): boolean {
+      try {
+        const url = new URL(text.trim());
+        return url.protocol === "http:" || url.protocol === "https:";
+      } catch {
+        return false;
+      }
+    }
+
+    async function saveUrlClip(url: string) {
+      try {
+        const res = await fetch("/api/clips", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            code, 
+            content: url.trim(), 
+            type: "url",
+            category: "links" 
+          }),
+        });
+        const data = await res.json();
+        if (data.clip) {
+          setClips((prev) => [data.clip, ...prev]);
+        }
+      } catch (error) {
+        console.error("Failed to save URL clip:", error);
+      }
+    }
+
+    function handleCopy(e: ClipboardEvent) {
+      const selection = window.getSelection();
+      const selectedText = selection?.toString()?.trim();
+      
+      if (selectedText && isUrl(selectedText)) {
+        // Show popup notification
+        setCopyToast({ show: true, message: "Link copied & saved!" });
+        setTimeout(() => setCopyToast({ show: false, message: "" }), 2500);
+        
+        // Save the URL to clips
+        saveUrlClip(selectedText);
+      }
+    }
+
+    document.addEventListener("copy", handleCopy);
+    return () => document.removeEventListener("copy", handleCopy);
+  }, [code]);
+
   async function copyToClipboard(content: string, id: string) {
+    const isUrl = content.startsWith("http://") || content.startsWith("https://");
+    const toastMessage = isUrl ? "URL copied to clipboard!" : "Copied to clipboard!";
+    
     try {
       await navigator.clipboard.writeText(content);
       setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
+      setCopyToast({ show: true, message: toastMessage });
+      setTimeout(() => {
+        setCopiedId(null);
+        setCopyToast({ show: false, message: "" });
+      }, 2000);
     } catch {
       const textarea = document.createElement("textarea");
       textarea.value = content;
@@ -114,7 +174,11 @@ function DashboardContent() {
       document.execCommand("copy");
       document.body.removeChild(textarea);
       setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
+      setCopyToast({ show: true, message: toastMessage });
+      setTimeout(() => {
+        setCopiedId(null);
+        setCopyToast({ show: false, message: "" });
+      }, 2000);
     }
   }
 
@@ -365,9 +429,18 @@ function DashboardContent() {
 
                         {/* Content display */}
                         {isLink ? (
-                          <a href={clip.content} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline break-all">
-                            {clip.content}
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <a href={clip.content} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline break-all flex-1">
+                              {clip.content}
+                            </a>
+                            <button 
+                              onClick={(e) => { e.preventDefault(); copyToClipboard(clip.content, clip.id + "-url"); }}
+                              className="shrink-0 p-1 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded transition-colors"
+                              title="Copy URL"
+                            >
+                              {copiedId === clip.id + "-url" ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
                         ) : isCode ? (
                           <div className="rounded-md overflow-hidden mt-1 text-xs max-h-48 overflow-y-auto">
                             {isSingleLine ? (
@@ -413,6 +486,16 @@ function DashboardContent() {
           </div>
         )}
       </div>
+
+      {/* Copy Toast Popup */}
+      {copyToast.show && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/20">
+            <CheckCircle className="w-4 h-4" />
+            <span className="text-sm font-medium">{copyToast.message}</span>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
