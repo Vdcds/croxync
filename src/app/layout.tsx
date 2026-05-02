@@ -1,23 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Lora, Roboto_Mono } from "next/font/google";
+import { Nunito } from "next/font/google";
 import "./globals.css";
 
-const jakartaSans = Plus_Jakarta_Sans({
+const nunito = Nunito({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
-});
-
-const lora = Lora({
-  variable: "--font-heading",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const robotoMono = Roboto_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -51,12 +40,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${jakartaSans.variable} ${lora.variable} ${robotoMono.variable} dark h-full antialiased`}
+      className={`${nunito.variable} dark h-full antialiased`}
     >
       <head>
         <link rel="apple-touch-icon" href="/icon-192x192.png" />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col font-sans">
         {children}
         <script
           dangerouslySetInnerHTML={{

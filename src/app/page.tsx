@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ClipboardCopy, Sparkles, ArrowRight, Link2, QrCode, Zap, Shield, Smartphone } from "lucide-react";
+import { ClipboardCopy, Sparkles, ArrowRight, Link2, QrCode, Zap, Shield, Smartphone, Loader2 } from "lucide-react";
+import { getCurrentCode, setCurrentCode } from "@/lib/session";
 
 export default function HomePage() {
   const router = useRouter();
@@ -14,6 +15,16 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [newCode, setNewCode] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    const saved = getCurrentCode();
+    if (saved) {
+      router.replace("/dashboard");
+    } else {
+      setChecking(false);
+    }
+  }, [router]);
 
   async function createNewUser() {
     setLoading(true);
@@ -22,7 +33,7 @@ export default function HomePage() {
       const res = await fetch("/api/auth", { method: "POST", body: JSON.stringify({}) });
       const data = await res.json();
       if (data.user) {
-        localStorage.setItem("croxync-code", data.user.code);
+        setCurrentCode(data.user.code);
         setNewCode(data.user.code);
       }
     } catch {
@@ -44,7 +55,7 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (data.user) {
-        localStorage.setItem("croxync-code", data.user.code);
+        setCurrentCode(data.user.code);
         router.push("/dashboard");
       } else {
         setError("Invalid code. Please try again.");
@@ -59,6 +70,14 @@ export default function HomePage() {
   const qrUrl = typeof window !== "undefined" && newCode
     ? `${window.location.origin}/dashboard?code=${newCode}`
     : "";
+
+  if (checking) {
+    return (
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </main>
+    );
+  }
 
   if (newCode) {
     return (

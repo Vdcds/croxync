@@ -6,10 +6,12 @@ import { QRCodeSVG } from "qrcode.react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardCopy, Trash2, ExternalLink, Copy, LogOut, RefreshCw, Clock, QrCode, X, Link2, Code, FileText, List, MoreHorizontal, Check, Plus, Send, CheckCircle, Download } from "lucide-react";
+import { ClipboardCopy, Trash2, ExternalLink, Copy, LogOut, RefreshCw, Clock, QrCode, X, Link2, Code, FileText, List, MoreHorizontal, Check, Plus, Send, CheckCircle, Download, History, ChevronDown, ArrowRight } from "lucide-react";
 import { detectCategory } from "@/lib/categories";
+import { getCurrentCode, setCurrentCode, clearCurrentCode, getCodeHistory, removeCodeFromHistory, type CodeSession } from "@/lib/session";
 
 interface Clip {
   id: string;
@@ -63,6 +65,10 @@ function DashboardContent() {
   const [copyToast, setCopyToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
+  const [sessionHistory, setSessionHistory] = useState<CodeSession[]>([]);
+  const [switchCodeInput, setSwitchCodeInput] = useState("");
+  const [switchError, setSwitchError] = useState("");
 
   interface BeforeInstallPromptEvent extends Event {
     prompt(): Promise<void>;
@@ -105,20 +111,22 @@ function DashboardContent() {
     const urlCode = searchParams.get("code");
     if (urlCode) {
       const upperCode = urlCode.toUpperCase();
-      localStorage.setItem("croxync-code", upperCode);
+      setCurrentCode(upperCode);
       setCode(upperCode);
       fetchClips(upperCode);
       window.history.replaceState({}, "", "/dashboard");
+      setSessionHistory(getCodeHistory());
       return;
     }
 
-    const saved = localStorage.getItem("croxync-code");
+    const saved = getCurrentCode();
     if (!saved) {
       router.push("/");
       return;
     }
     setCode(saved);
     fetchClips(saved);
+    setSessionHistory(getCodeHistory());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -235,8 +243,50 @@ function DashboardContent() {
   }
 
   function logout() {
-    localStorage.removeItem("croxync-code");
+    clearCurrentCode();
     router.push("/");
+  }
+
+  function switchToSession(sessionCode: string) {
+    setCurrentCode(sessionCode);
+    setCode(sessionCode);
+    setClips([]);
+    setLoading(true);
+    fetchClips(sessionCode);
+    setSessionHistory(getCodeHistory());
+    setShowSessions(false);
+    setSwitchCodeInput("");
+    setSwitchError("");
+  }
+
+  async function joinNewCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!switchCodeInput.trim()) return;
+    setSwitchError("");
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        body: JSON.stringify({ code: switchCodeInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.user) {
+        switchToSession(data.user.code);
+      } else {
+        setSwitchError("Invalid code. Please try again.");
+      }
+    } catch {
+      setSwitchError("Something went wrong");
+    }
+  }
+
+  function removeSession(sessionCode: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    removeCodeFromHistory(sessionCode);
+    setSessionHistory(getCodeHistory());
+    if (sessionCode === code) {
+      clearCurrentCode();
+      router.push("/");
+    }
   }
 
   function formatDate(dateStr: string) {
@@ -250,6 +300,11 @@ function DashboardContent() {
     if (hrs < 24) return `${hrs}h ago`;
     const days = Math.floor(hrs / 24);
     if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+
+  function formatSessionDate(ts: number) {
+    const date = new Date(ts);
     return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   }
 
@@ -312,7 +367,13 @@ function DashboardContent() {
             </div>
             <div>
               <h1 className="text-xl font-bold font-heading tracking-tight">Croxync</h1>
-              <span className="font-mono text-xs text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-md border border-violet-500/20">{code}</span>
+              <button
+                onClick={() => setShowSessions(true)}
+                className="font-mono text-xs text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-md border border-violet-500/20 hover:bg-violet-500/20 transition-colors flex items-center gap-1"
+              >
+                {code}
+                <ChevronDown className="w-3 h-3" />
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -347,6 +408,91 @@ function DashboardContent() {
               </button>
             </CardContent>
           </Card>
+        )}
+
+        {/* Sessions Modal */}
+        {showSessions && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+            <Card className="bg-card border-border w-full max-w-sm animate-fade-in-up">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <History className="w-5 h-5 text-violet-400" />
+                    Your Sessions
+                  </h3>
+                  <button onClick={() => setShowSessions(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+                  {sessionHistory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No sessions yet</p>
+                  ) : (
+                    sessionHistory.map((session) => (
+                      <button
+                        key={session.code}
+                        onClick={() => switchToSession(session.code)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${
+                          session.code === code
+                            ? "bg-violet-500/10 border-violet-500/30"
+                            : "bg-card/50 border-border/50 hover:bg-accent hover:border-border"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                            session.code === code
+                              ? "bg-violet-500/20 text-violet-300"
+                              : "bg-zinc-500/20 text-zinc-300"
+                          }`}>
+                            {session.code.slice(0, 2)}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-semibold text-foreground">{session.code}</p>
+                            <p className="text-[10px] text-muted-foreground">{formatSessionDate(session.lastUsed)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {session.code === code && (
+                            <span className="text-[10px] font-medium text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded">Active</span>
+                          )}
+                          <button
+                            onClick={(e) => removeSession(session.code, e)}
+                            className="p-1 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                            title="Remove from history"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div className="border-t border-border pt-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Join different code</p>
+                  <form onSubmit={joinNewCode} className="flex gap-2">
+                    <Input
+                      placeholder="Enter code"
+                      value={switchCodeInput}
+                      onChange={(e) => setSwitchCodeInput(e.target.value.toUpperCase())}
+                      className="bg-input border-border/50 text-foreground placeholder:text-muted-foreground h-9 text-sm"
+                      maxLength={6}
+                    />
+                    <Button
+                      type="submit"
+                      disabled={!switchCodeInput.trim()}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground shrink-0 h-9 px-3"
+                      size="sm"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </form>
+                  {switchError && <p className="text-red-400 text-xs mt-1.5">{switchError}</p>}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Category tabs */}
