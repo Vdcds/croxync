@@ -8,7 +8,7 @@ import oneDark from "react-syntax-highlighter/dist/esm/styles/prism/one-dark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ClipboardCopy, Trash2, ExternalLink, Copy, LogOut, RefreshCw, Clock, QrCode, X, Link2, Code, FileText, List, MoreHorizontal, Check, Plus, Send, CheckCircle } from "lucide-react";
+import { ClipboardCopy, Trash2, ExternalLink, Copy, LogOut, RefreshCw, Clock, QrCode, X, Link2, Code, FileText, List, MoreHorizontal, Check, Plus, Send, CheckCircle, Download } from "lucide-react";
 import { detectCategory } from "@/lib/categories";
 
 interface Clip {
@@ -61,6 +61,31 @@ function DashboardContent() {
   const [pasteText, setPasteText] = useState("");
   const [saving, setSaving] = useState(false);
   const [copyToast, setCopyToast] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstall, setShowInstall] = useState(false);
+
+  interface BeforeInstallPromptEvent extends Event {
+    prompt(): Promise<void>;
+    userChoice: Promise<{ outcome: string }>;
+  }
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e as BeforeInstallPromptEvent);
+      setShowInstall(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === "accepted") setShowInstall(false);
+    setInstallPrompt(null);
+  }
 
   const fetchClips = useCallback(async (userCode: string) => {
     try {
@@ -102,7 +127,6 @@ function DashboardContent() {
     return () => clearInterval(interval);
   }, [code, fetchClips]);
 
-  // Global copy detection for URLs
   useEffect(() => {
     if (!code) return;
 
@@ -141,11 +165,8 @@ function DashboardContent() {
       const selectedText = selection?.toString()?.trim();
 
       if (selectedText && isUrl(selectedText)) {
-        // Show popup notification
         setCopyToast({ show: true, message: "Link copied & saved!" });
         setTimeout(() => setCopyToast({ show: false, message: "" }), 2500);
-
-        // Save the URL to clips
         saveUrlClip(selectedText);
       }
     }
@@ -248,11 +269,11 @@ function DashboardContent() {
 
   function getCategoryColor(cat: string) {
     switch (cat) {
-      case "links": return "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
+      case "links": return "bg-violet-500/20 text-violet-300 border-violet-500/30";
       case "code": return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
       case "notes": return "bg-amber-500/20 text-amber-300 border-amber-500/30";
-      case "lists": return "bg-pink-500/20 text-pink-300 border-pink-500/30";
-      default: return "bg-slate-500/20 text-slate-300 border-slate-500/30";
+      case "lists": return "bg-rose-500/20 text-rose-300 border-rose-500/30";
+      default: return "bg-zinc-500/20 text-zinc-300 border-zinc-500/30";
     }
   }
 
@@ -266,22 +287,42 @@ function DashboardContent() {
   const qrUrl = typeof window !== "undefined" ? `${window.location.origin}/dashboard?code=${code}` : "";
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+    <main className="min-h-screen bg-background text-foreground">
+      {/* Install PWA banner */}
+      {showInstall && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between animate-fade-in-up">
+          <span className="text-sm font-medium">Install Croxync for quick access</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={handleInstall} className="h-7 text-xs">
+              <Download className="w-3.5 h-3.5 mr-1" /> Install
+            </Button>
+            <button onClick={() => setShowInstall(false)} className="opacity-70 hover:opacity-100">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">Clips</h1>
-            <span className="font-mono text-xs text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">{code}</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center shadow-lg shadow-violet-500/25">
+              <ClipboardCopy className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold font-heading tracking-tight">Croxync</h1>
+              <span className="font-mono text-xs text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-md border border-violet-500/20">{code}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowQr(!showQr)} className="border-white/10 bg-white/5 hover:bg-white/10">
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => setShowQr(!showQr)} className="border-border/50 bg-card hover:bg-accent">
               <QrCode className="w-4 h-4 mr-1" />QR
             </Button>
-            <Button variant="outline" size="sm" onClick={() => fetchClips(code)} className="border-white/10 bg-white/5 hover:bg-white/10">
+            <Button variant="outline" size="sm" onClick={() => fetchClips(code)} className="border-border/50 bg-card hover:bg-accent">
               <RefreshCw className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={logout} className="border-white/10 bg-white/5 hover:bg-white/10">
+            <Button variant="outline" size="sm" onClick={logout} className="border-border/50 bg-card hover:bg-accent">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -289,19 +330,19 @@ function DashboardContent() {
 
         {/* QR */}
         {showQr && (
-          <Card className="bg-white/5 border-white/10 mb-4">
+          <Card className="bg-card/80 backdrop-blur-sm border-border/50 mb-4 animate-fade-in-up">
             <CardContent className="py-4 flex items-center gap-4">
-              <div className="bg-white p-2 rounded-lg shrink-0">
+              <div className="bg-white p-2.5 rounded-xl shrink-0 shadow-lg shadow-black/20">
                 <QRCodeSVG value={qrUrl} size={100} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-200">Scan to connect phone</p>
-                <p className="text-xs text-slate-500 mt-1">Opens dashboard with your code</p>
-                <button onClick={() => { copyToClipboard(qrUrl, "qr"); setShowQr(false); }} className="text-xs text-cyan-400 hover:underline mt-2">
+                <p className="text-sm font-semibold text-foreground">Scan to connect phone</p>
+                <p className="text-xs text-muted-foreground mt-1">Opens dashboard with your code</p>
+                <button onClick={() => { copyToClipboard(qrUrl, "qr"); setShowQr(false); }} className="text-xs text-violet-400 hover:text-violet-300 hover:underline mt-2 transition-colors">
                   Copy link instead
                 </button>
               </div>
-              <button onClick={() => setShowQr(false)} className="text-slate-500 hover:text-white shrink-0">
+              <button onClick={() => setShowQr(false)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0">
                 <X className="w-4 h-4" />
               </button>
             </CardContent>
@@ -309,7 +350,7 @@ function DashboardContent() {
         )}
 
         {/* Category tabs */}
-        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1 scrollbar-none">
           {CATEGORIES.map((cat) => {
             const Icon = cat.icon;
             const count = categoryCounts(cat.key);
@@ -318,10 +359,10 @@ function DashboardContent() {
               <button
                 key={cat.key}
                 onClick={() => { setActiveCategory(cat.key); if (cat.key !== "all") setPasteCategory(cat.key); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
                   isActive
-                    ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/30"
-                    : "bg-white/5 text-slate-400 border border-transparent hover:bg-white/10 hover:text-slate-300"
+                    ? "bg-primary/15 text-primary border border-primary/30 shadow-sm shadow-primary/10"
+                    : "bg-card text-muted-foreground border border-transparent hover:bg-accent hover:text-foreground"
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -332,19 +373,19 @@ function DashboardContent() {
           })}
         </div>
 
-        {/* Paste bar with category selector */}
-        <div className="flex gap-2 items-center mb-4">
+        {/* Paste bar */}
+        <div className="flex gap-0 items-center mb-4 group">
           <select
             value={pasteCategory}
             onChange={(e) => setPasteCategory(e.target.value)}
-            className={`shrink-0 px-2.5 py-2 rounded-l-lg border border-r-0 border-white/10 bg-white/5 text-xs font-semibold outline-none cursor-pointer appearance-none pr-7 pl-2.5 transition-colors ${
-              pasteCategory === "links" ? "text-indigo-300" :
-              pasteCategory === "code" ? "text-emerald-300" :
-              pasteCategory === "notes" ? "text-amber-300" :
-              pasteCategory === "lists" ? "text-pink-300" :
-              "text-slate-300"
+            className={`shrink-0 px-2.5 py-2.5 rounded-l-xl border border-r-0 border-border bg-card text-xs font-bold outline-none cursor-pointer appearance-none pr-7 transition-colors ${
+              pasteCategory === "links" ? "text-violet-400" :
+              pasteCategory === "code" ? "text-emerald-400" :
+              pasteCategory === "notes" ? "text-amber-400" :
+              pasteCategory === "lists" ? "text-rose-400" :
+              "text-zinc-400"
             }`}
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2378716c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center' }}
           >
             <option value="general">Other</option>
             <option value="links">Link</option>
@@ -358,12 +399,12 @@ function DashboardContent() {
             onChange={(e) => setPasteText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") pasteClip(); }}
             placeholder={`Paste ${pasteCategory === "links" ? "a link" : pasteCategory === "code" ? "code" : pasteCategory === "notes" ? "a note" : pasteCategory === "lists" ? "a list" : "text"} to sync...`}
-            className="flex-1 px-3 py-2 border border-white/10 bg-white/5 text-sm text-white placeholder:text-slate-500 outline-none focus:border-cyan-500/50 transition-colors"
+            className="flex-1 px-3 py-2.5 border-y border-border bg-card text-sm text-foreground placeholder:text-muted-foreground outline-none focus:bg-accent/50 transition-colors"
           />
           <Button
             onClick={pasteClip}
             disabled={saving || !pasteText.trim()}
-            className="bg-linear-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shrink-0"
+            className="rounded-l-none rounded-r-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shrink-0 h-[42px] shadow-lg shadow-violet-500/20"
             size="sm"
           >
             <Send className="w-4 h-4 mr-1" />
@@ -373,15 +414,20 @@ function DashboardContent() {
 
         {/* Clips */}
         {loading ? (
-          <div className="text-center py-16 text-slate-400">Loading clips...</div>
+          <div className="text-center py-16 text-muted-foreground">
+            <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-3" />
+            Loading clips...
+          </div>
         ) : filteredClips.length === 0 ? (
-          <Card className="bg-white/5 border-white/10">
+          <Card className="bg-card/50 border-border/30">
             <CardContent className="py-16 text-center">
-              <ClipboardCopy className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center mx-auto mb-4">
+                <ClipboardCopy className="w-7 h-7 text-violet-400" />
+              </div>
+              <p className="text-foreground font-medium">
                 {activeCategory === "all" ? "No clips yet" : `No ${CATEGORIES.find(c => c.key === activeCategory)?.label?.toLowerCase()} clips`}
               </p>
-              <p className="text-slate-500 text-sm mt-1">
+              <p className="text-muted-foreground text-sm mt-1">
                 Select text on any page and save with Croxync
               </p>
             </CardContent>
@@ -398,7 +444,7 @@ function DashboardContent() {
               const isSingleLine = !clip.content.includes("\n");
 
               return (
-                <Card key={clip.id} className={`bg-white/5 border-white/10 hover:bg-white/[0.07] transition-all ${isLink ? "border-l-2 border-l-indigo-500/60" : ""} ${isCode ? "border-l-2 border-l-emerald-500/60" : ""}`}>
+                <Card key={clip.id} className={`bg-card/60 backdrop-blur-sm border-border/30 hover:bg-card/80 hover:border-border/60 transition-all ${isLink ? "border-l-2 border-l-violet-500/60" : ""} ${isCode ? "border-l-2 border-l-emerald-500/60" : ""}`}>
                   <CardContent className="p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
@@ -410,41 +456,40 @@ function DashboardContent() {
                           {clip.source && (() => {
                             try {
                               return (
-                                <a href={clip.source} target="_blank" rel="noopener noreferrer" className="text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-0.5 truncate">
+                                <a href={clip.source} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-0.5 truncate transition-colors">
                                   <ExternalLink className="w-2.5 h-2.5" />
                                   {new URL(clip.source).hostname}
                                 </a>
                               );
                             } catch { return null; }
                           })()}
-                          <span className="text-[10px] text-slate-600 flex items-center gap-0.5">
+                          <span className="text-[10px] text-muted-foreground/60 flex items-center gap-0.5">
                             <Clock className="w-2.5 h-2.5" />
                             {formatDate(clip.createdAt)}
                           </span>
                         </div>
 
                         {clip.title && !isCode && (
-                          <p className="text-sm font-medium text-white mb-1 truncate">{clip.title}</p>
+                          <p className="text-sm font-medium text-foreground mb-1 truncate">{clip.title}</p>
                         )}
 
-                        {/* Content display */}
                         {isLink ? (
                           <div className="flex items-center gap-2">
-                            <a href={clip.content} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 hover:underline break-all flex-1">
+                            <a href={clip.content} target="_blank" rel="noopener noreferrer" className="text-sm text-violet-400 hover:text-violet-300 hover:underline break-all flex-1 transition-colors">
                               {clip.content}
                             </a>
                             <button
                               onClick={(e) => { e.preventDefault(); copyToClipboard(clip.content, clip.id + "-url"); }}
-                              className="shrink-0 p-1 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 rounded transition-colors"
+                              className="shrink-0 p-1 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded transition-colors"
                               title="Copy URL"
                             >
-                              {copiedId === clip.id + "-url" ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedId === clip.id + "-url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                             </button>
                           </div>
                         ) : isCode ? (
-                          <div className="rounded-md overflow-hidden mt-1 text-xs max-h-48 overflow-y-auto">
+                          <div className="rounded-lg overflow-hidden mt-1 text-xs max-h-48 overflow-y-auto">
                             {isSingleLine ? (
-                              <div className="bg-slate-900/80 text-emerald-300 font-mono p-2">
+                              <div className="bg-black/40 text-emerald-300 font-mono p-2">
                                 {clip.content}
                               </div>
                             ) : (
@@ -455,8 +500,8 @@ function DashboardContent() {
                                   margin: 0,
                                   padding: "8px 10px",
                                   fontSize: "12px",
-                                  borderRadius: "6px",
-                                  background: "#0c1222",
+                                  borderRadius: "8px",
+                                  background: "oklch(0.08 0.014 270)",
                                 }}
                                 wrapLines={true}
                                 showLineNumbers={clip.content.split("\n").length > 3}
@@ -466,15 +511,15 @@ function DashboardContent() {
                             )}
                           </div>
                         ) : (
-                          <p className="text-sm text-slate-300 whitespace-pre-wrap wrap-break-words">{clip.content}</p>
+                          <p className="text-sm text-foreground/80 whitespace-pre-wrap wrap-break-words">{clip.content}</p>
                         )}
                       </div>
 
                       <div className="flex items-center gap-0.5 shrink-0">
-                        <Button variant="ghost" size="sm" onClick={() => copyToClipboard(clip.content, clip.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-white hover:bg-white/10">
-                          {copiedId === clip.id ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <Button variant="ghost" size="sm" onClick={() => copyToClipboard(clip.content, clip.id)} className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent">
+                          {copiedId === clip.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => deleteClip(clip.id)} className="h-7 w-7 p-0 text-slate-400 hover:text-red-400 hover:bg-red-500/10">
+                        <Button variant="ghost" size="sm" onClick={() => deleteClip(clip.id)} className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400 hover:bg-red-500/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -489,8 +534,8 @@ function DashboardContent() {
 
       {/* Copy Toast Popup */}
       {copyToast.show && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <div className="flex items-center gap-2 bg-linear-0-to-r from-cyan-500 to-blue-600 text-white px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/20">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-fade-in-up">
+          <div className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-4 py-2.5 rounded-xl shadow-lg shadow-violet-500/30">
             <CheckCircle className="w-4 h-4" />
             <span className="text-sm font-medium">{copyToast.message}</span>
           </div>
@@ -503,8 +548,8 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-white flex items-center justify-center">
-        <p className="text-slate-400">Loading...</p>
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
       </main>
     }>
       <DashboardContent />
