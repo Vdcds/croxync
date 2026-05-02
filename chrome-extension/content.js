@@ -16,6 +16,12 @@
   }
 
   function createWidget() {
+    // Wait for body to be available
+    if (!document.body) {
+      setTimeout(createWidget, 100);
+      return;
+    }
+    
     if (document.getElementById(CONTAINER_ID)) {
       widget = document.getElementById(CONTAINER_ID);
       return;
@@ -909,9 +915,9 @@
     if (widget && widget.contains(e.target)) return;
     const s = shadow();
     if (!s) return;
-    const internalEls = s.querySelectorAll('.wrapper *');
-    const isInternal = Array.from(internalEls).some(el => el === e.target || el.contains(e.target));
-    if (isInternal) return;
+    const wrapper = s.querySelector('.wrapper');
+    if (wrapper && (e.target === wrapper || wrapper.contains(e.target))) return;
+    if (sitePopup && sitePopup.contains(e.target)) return;
     if (isVisible) {
       const text = getSelectedText();
       if (!text) hideWidget();
@@ -957,12 +963,16 @@
   });
 
   document.addEventListener('mousedown', (e) => {
+    // Check if click is inside our widget or shadow DOM
     if (widget && widget.contains(e.target)) return;
     const s = shadow();
     if (!s) return;
-    const internalEls = s.querySelectorAll('.wrapper *');
-    const isInternal = Array.from(internalEls).some(el => el === e.target || el.contains(e.target));
-    if (isInternal) return;
+    // Also check shadow root elements
+    const wrapper = s.querySelector('.wrapper');
+    if (wrapper && (e.target === wrapper || wrapper.contains(e.target))) return;
+    // Check if clicking inside any popup we created
+    if (sitePopup && sitePopup.contains(e.target)) return;
+    
     const text = getSelectedText();
     if (!text && isVisible) {
       hideWidget();
@@ -989,18 +999,18 @@
     const trimmedText = text.trim();
     const now = Date.now();
     
-    // Prevent duplicate processing within 2 seconds
     if (trimmedText === lastCopiedContent && (now - lastCopiedTime) < 2000) return;
     
     const copiedIsUrl = isUrl(trimmedText);
 
-    // Always show URL popup for URLs when copied - this provides visual feedback
+    // Always show URL popup for URLs when copied
     if (copiedIsUrl) {
       showSitePopup(trimmedText);
       lastCopiedContent = trimmedText;
       lastCopiedTime = now;
     }
 
+    // Save to backend if code is set
     chrome.storage.sync.get(['croxyncCode', 'autoSave', 'autoPasteUrl'], (settings) => {
       if (!settings.croxyncCode) return;
 
@@ -1009,6 +1019,9 @@
       else if (!copiedIsUrl && settings.autoSave === true) shouldSave = true;
 
       if (shouldSave) {
+        lastCopiedContent = trimmedText;
+        lastCopiedTime = Date.now();
+
         const category = typeof detectCategory === 'function' ? detectCategory(trimmedText, copiedIsUrl ? 'url' : 'text') : (copiedIsUrl ? 'links' : 'general');
         const siteInfo = getSiteInfo(trimmedText);
 
@@ -1022,10 +1035,7 @@
             source: location.href,
           },
         }, (response) => {
-          if (chrome.runtime.lastError) {
-            // Extension context invalidated or not ready
-            return;
-          }
+          if (chrome.runtime.lastError) return;
           if (response && response.success && !response.dedup) {
             showToast(copiedIsUrl ? 'Link auto-synced!' : 'Copied & synced!', 'success', copiedIsUrl);
             showSyncIndicator(copiedIsUrl ? 'Link synced' : 'Clip synced');
@@ -1036,24 +1046,38 @@
     });
   }
 
-  // Single copy event handler - most reliable method
-  document.addEventListener('copy', (e) => {
-    // Get the selected text before it's cleared
+  // Primary: capture selected text on copy event (works for text selections)
+  document.addEventListener('copy', () => {
+    // Capture selection text synchronously before the event clears it
     const sel = window.getSelection();
-    const selectedText = sel ? sel.toString().trim() : '';
+    const text = sel ? sel.toString().trim() : '';
+    if (text && text.length >= 2) {
+      handleCopiedText(text);
+    }
+  });
+
+  // Secondary: detect Ctrl/Cmd+C via keydown (works even if copy event doesn't fire)
+  // and for cases where the copy event doesn't bubble (e.g. address bar copy)
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.key !== 'c') return;
+    if (e.shiftKey) return; // Don't trigger on Ctrl+Shift+C
     
+    // Small delay to let clipboard update
     setTimeout(() => {
-      // First try selected text, if empty try clipboard
+      // Try to read from the current selection first
+      const sel = window.getSelection();
+      const selectedText = sel ? sel.toString().trim() : '';
       if (selectedText && selectedText.length >= 2) {
         handleCopiedText(selectedText);
       } else {
+        // Fallback: try clipboard (may fail due to permissions)
         navigator.clipboard.readText().then((clipText) => {
           if (clipText && clipText.trim().length >= 2) {
             handleCopiedText(clipText);
           }
         }).catch(() => {});
       }
-    }, 50);
+    }, 100);
   });
 
   function getSiteInfo(url) {
