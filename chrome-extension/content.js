@@ -8,20 +8,32 @@
   let isExpanded = false;
   let hideTimeout = null;
   let lastSaveTime = 0;
-  let currentSelection = '';
   let savedPillTimeout = null;
 
   function shadow() {
     return shadowRoot;
   }
 
+  function isInsideWidget(e) {
+    // Check if click was on the host element
+    if (widget && widget.contains(e.target)) return true;
+    // Check site popup
+    if (sitePopup && sitePopup.contains(e.target)) return true;
+    // Check composed path for shadow DOM events
+    var path = e.composedPath ? e.composedPath() : [];
+    for (var i = 0; i < path.length; i++) {
+      if (path[i] === widget) return true;
+      if (sitePopup && path[i] === sitePopup) return true;
+    }
+    return false;
+  }
+
   function createWidget() {
-    // Wait for body to be available
     if (!document.body) {
       setTimeout(createWidget, 100);
       return;
     }
-    
+
     if (document.getElementById(CONTAINER_ID)) {
       widget = document.getElementById(CONTAINER_ID);
       return;
@@ -31,7 +43,7 @@
     widget.id = CONTAINER_ID;
     shadowRoot = widget.attachShadow({ mode: 'closed' });
 
-    const style = document.createElement('style');
+    var style = document.createElement('style');
     style.textContent = `
       * { margin:0; padding:0; box-sizing:border-box; }
 
@@ -453,7 +465,7 @@
       .sync-indicator svg { width: 16px; height: 16px; }
     `;
 
-    const wrapper = document.createElement('div');
+    var wrapper = document.createElement('div');
     wrapper.className = 'wrapper';
     wrapper.innerHTML = `
       <div class="pill" id="croxync-pill">
@@ -533,39 +545,35 @@
     shadowRoot.getElementById('croxync-save-btn').addEventListener('click', onPanelSave);
     shadowRoot.getElementById('croxync-copy-btn').addEventListener('click', onCopyAndSave);
     shadowRoot.getElementById('croxync-paste-btn').addEventListener('click', onPasteSubmit);
-    shadowRoot.getElementById('croxync-paste-input').addEventListener('keydown', (e) => {
+    shadowRoot.getElementById('croxync-paste-input').addEventListener('keydown', function(e) {
       if (e.key === 'Enter') onPasteSubmit();
     });
 
-    const catButtons = shadowRoot.querySelectorAll('.cat-btn');
-    catButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        catButtons.forEach(b => b.classList.remove('active'));
+    var catButtons = shadowRoot.querySelectorAll('.cat-btn');
+    catButtons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        catButtons.forEach(function(b) { b.classList.remove('active'); });
         btn.classList.add('active');
       });
     });
 
-    // Click pill label to expand panel
-    const pillLabel = shadowRoot.getElementById('croxync-pill-label');
+    var pillLabel = shadowRoot.getElementById('croxync-pill-label');
     if (pillLabel) {
       pillLabel.style.cursor = 'pointer';
-      pillLabel.addEventListener('click', () => {
-        const text = getSelectedText();
+      pillLabel.addEventListener('click', function() {
+        var text = getSelectedText();
         if (text) {
           showPanel(text);
           positionNearSelection();
         }
       });
     }
-
-    document.addEventListener('mousedown', onDocumentClick);
-    document.addEventListener('keydown', onKeyDown);
   }
 
-  let selectedCategory = 'links';
+  var selectedCategory = 'links';
 
   function getSelectedText() {
-    const sel = window.getSelection();
+    var sel = window.getSelection();
     return sel ? sel.toString().trim() : '';
   }
 
@@ -576,94 +584,91 @@
   }
 
   function positionNearSelection() {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
-    const wrapper = s.querySelector('.wrapper');
-    const sel = window.getSelection();
+    var wrapper = s.querySelector('.wrapper');
+    var sel = window.getSelection();
     if (!sel || sel.rangeCount === 0 || !sel.toString().trim()) {
       hideWidget();
       return;
     }
 
-    const range = sel.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
+    var range = sel.getRangeAt(0);
+    var rect = range.getBoundingClientRect();
 
     if (!isExpanded) {
-      let top = rect.top + window.scrollY - 44;
-      let left = rect.left + window.scrollX + rect.width / 2;
+      var top = rect.top + window.scrollY - 44;
+      var left = rect.left + window.scrollX + rect.width / 2;
       if (top < 8) top = rect.bottom + window.scrollY + 10;
       left = Math.max(80, Math.min(left, window.innerWidth - 80));
       wrapper.style.top = top + 'px';
       wrapper.style.left = left + 'px';
-      wrapper.style.transform = `translateX(-50%)`;
+      wrapper.style.transform = 'translateX(-50%)';
     }
 
     if (!isVisible) {
       isVisible = true;
       wrapper.classList.remove('hiding');
-      requestAnimationFrame(() => {
+      requestAnimationFrame(function() {
         wrapper.style.animation = 'croxync-pop-in 0.18s ease-out forwards';
       });
     }
   }
 
   function showPill(text) {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
     isExpanded = false;
     s.getElementById('croxync-panel').style.display = 'none';
     s.getElementById('croxync-pill').style.display = 'flex';
 
-    const isLink = isUrl(text);
-    const pill = s.getElementById('croxync-pill');
-    const label = s.getElementById('croxync-pill-label');
-    const saveBtn = s.getElementById('croxync-pill-save');
+    var isLink = isUrl(text);
+    var pill = s.getElementById('croxync-pill');
+    var label = s.getElementById('croxync-pill-label');
+    var saveBtn = s.getElementById('croxync-pill-save');
 
     pill.classList.toggle('is-link', isLink);
     pill.classList.remove('is-link-saved');
     label.textContent = isLink ? 'Link' : 'Croxync';
 
     saveBtn.classList.remove('saved');
-    saveBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
+    saveBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
 
     selectedCategory = typeof detectCategory === 'function' ? detectCategory(text, isLink ? 'url' : 'text') : (isLink ? 'links' : 'general');
-    const catBtns = s.querySelectorAll('.cat-btn');
-    catBtns.forEach(b => {
+    var catBtns = s.querySelectorAll('.cat-btn');
+    catBtns.forEach(function(b) {
       b.classList.toggle('active', b.getAttribute('data-cat') === selectedCategory);
     });
   }
 
   function showPanel(selectedText) {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
     isExpanded = true;
 
     s.getElementById('croxync-pill').style.display = 'none';
     s.getElementById('croxync-panel').style.display = 'block';
 
-    const isLink = isUrl(selectedText);
-    const badge = s.getElementById('croxync-type-badge');
+    var isLink = isUrl(selectedText);
+    var badge = s.getElementById('croxync-type-badge');
     badge.textContent = isLink ? 'link' : 'text';
     badge.className = 'panel-type-badge ' + (isLink ? 'url' : 'text');
 
-    const preview = s.getElementById('croxync-preview');
-    const truncated = selectedText.length > 200 ? selectedText.slice(0, 200) + '...' : selectedText;
+    var preview = s.getElementById('croxync-preview');
+    var truncated = selectedText.length > 200 ? selectedText.slice(0, 200) + '...' : selectedText;
     preview.textContent = truncated;
     preview.classList.toggle('fade', selectedText.length > 200);
     preview.classList.toggle('is-url', isLink);
 
     selectedCategory = typeof detectCategory === 'function' ? detectCategory(selectedText, isLink ? 'url' : 'text') : (isLink ? 'links' : 'general');
-    const catBtns = s.querySelectorAll('.cat-btn');
-    catBtns.forEach(b => {
+    var catBtns = s.querySelectorAll('.cat-btn');
+    catBtns.forEach(function(b) {
       b.classList.toggle('active', b.getAttribute('data-cat') === selectedCategory);
     });
 
-    const saveBtn = s.getElementById('croxync-save-btn');
+    var saveBtn = s.getElementById('croxync-save-btn');
     saveBtn.classList.remove('saved');
-    saveBtn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-      Save
-    `;
+    saveBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Save';
 
     s.getElementById('croxync-link-saved').classList.remove('visible');
     s.getElementById('croxync-paste-input').value = '';
@@ -672,15 +677,15 @@
   }
 
   function positionPanel() {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
-    const wrapper = s.querySelector('.wrapper');
-    const sel = window.getSelection();
+    var wrapper = s.querySelector('.wrapper');
+    var sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      const rect = range.getBoundingClientRect();
-      let top = rect.bottom + window.scrollY + 10;
-      let left = rect.left + window.scrollX + rect.width / 2;
+      var range = sel.getRangeAt(0);
+      var rect = range.getBoundingClientRect();
+      var top = rect.bottom + window.scrollY + 10;
+      var left = rect.left + window.scrollX + rect.width / 2;
       left = Math.max(160, Math.min(left, window.innerWidth - 160));
       wrapper.style.top = top + 'px';
       wrapper.style.left = left + 'px';
@@ -689,11 +694,11 @@
   }
 
   function hideWidget() {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
-    const wrapper = s.querySelector('.wrapper');
+    var wrapper = s.querySelector('.wrapper');
     wrapper.classList.add('hiding');
-    setTimeout(() => {
+    setTimeout(function() {
       if (!isVisible && s) {
         s.getElementById('croxync-pill').style.display = 'flex';
         s.getElementById('croxync-panel').style.display = 'none';
@@ -709,24 +714,24 @@
   }
 
   function getActiveCategory() {
-    const s = shadow();
+    var s = shadow();
     if (!s) return 'general';
-    const active = s.querySelector('.cat-btn.active');
+    var active = s.querySelector('.cat-btn.active');
     return active ? active.getAttribute('data-cat') : 'general';
   }
 
   function showToast(msg, type, isLink) {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
 
-    let toast = s.querySelector('.toast');
+    var toast = s.querySelector('.toast');
     if (!toast) {
       toast = document.createElement('div');
       toast.className = 'toast';
       s.appendChild(toast);
     }
 
-    let icon = '';
+    var icon = '';
     if (type === 'success') {
       if (isLink) {
         icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
@@ -741,43 +746,42 @@
     toast.innerHTML = icon + msg;
     toast.className = 'toast ' + type;
 
-    requestAnimationFrame(() => {
+    requestAnimationFrame(function() {
       toast.classList.add('visible');
     });
 
-    setTimeout(() => {
+    setTimeout(function() {
       toast.classList.remove('visible');
       toast.classList.add('hiding');
     }, 2200);
   }
 
-  // Subtle top-of-page sync indicator
   function showSyncIndicator(msg) {
-    const existing = document.getElementById('croxync-sync-indicator');
+    var existing = document.getElementById('croxync-sync-indicator');
     if (existing) existing.remove();
 
-    const el = document.createElement('div');
+    var el = document.createElement('div');
     el.id = 'croxync-sync-indicator';
     el.className = 'sync-indicator';
-    el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>${msg}`;
+    el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' + msg;
     document.body.appendChild(el);
-    setTimeout(() => { if (el.parentNode) el.remove(); }, 2000);
+    setTimeout(function() { if (el.parentNode) el.remove(); }, 2000);
   }
 
   function flashLinkSaved() {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
 
-    const pill = s.getElementById('croxync-pill');
+    var pill = s.getElementById('croxync-pill');
     if (pill) {
       pill.classList.add('is-link-saved');
-      setTimeout(() => pill.classList.remove('is-link-saved'), 600);
+      setTimeout(function() { pill.classList.remove('is-link-saved'); }, 600);
     }
 
-    const banner = s.getElementById('croxync-link-saved');
+    var banner = s.getElementById('croxync-link-saved');
     if (banner) {
       banner.classList.add('visible');
-      setTimeout(() => banner.classList.remove('visible'), 2000);
+      setTimeout(function() { banner.classList.remove('visible'); }, 2000);
     }
   }
 
@@ -788,13 +792,13 @@
     chrome.runtime.sendMessage({
       type: 'SAVE_CLIP',
       data: data,
-    }, (response) => {
+    }, function(response) {
       if (chrome.runtime.lastError) {
         showToast('Not connected', 'error');
         return;
       }
       if (response && response.success) {
-        const isLink = data.type === 'url';
+        var isLink = data.type === 'url';
         showToast(isLink ? 'Link synced!' : 'Synced to phone!', 'success', isLink);
         showSyncIndicator(isLink ? 'Link synced' : 'Clip synced');
         if (isLink) flashLinkSaved();
@@ -806,9 +810,9 @@
   }
 
   function onPillSave() {
-    const text = getSelectedText();
+    var text = getSelectedText();
     if (!text) return;
-    const isLink = isUrl(text);
+    var isLink = isUrl(text);
     sendToBackground({
       content: text,
       type: isLink ? 'url' : 'text',
@@ -816,27 +820,27 @@
       title: document.title,
       source: location.href,
     });
-    const s = shadow();
+    var s = shadow();
     if (s) {
-      const btn = s.getElementById('croxync-pill-save');
+      var btn = s.getElementById('croxync-pill-save');
       btn.classList.add('saved');
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
       clearTimeout(savedPillTimeout);
-      savedPillTimeout = setTimeout(() => {
+      savedPillTimeout = setTimeout(function() {
         btn.classList.remove('saved');
-        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`;
+        btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>';
       }, 1500);
     }
   }
 
   function onPanelSave() {
-    const text = getSelectedText();
+    var text = getSelectedText();
     if (!text) {
       showToast('Nothing selected', 'error');
       return;
     }
-    const isLink = isUrl(text);
-    const category = getActiveCategory();
+    var isLink = isUrl(text);
+    var category = getActiveCategory();
     sendToBackground({
       content: text,
       type: isLink ? 'url' : 'text',
@@ -845,34 +849,28 @@
       source: location.href,
     });
 
-    const s = shadow();
+    var s = shadow();
     if (s) {
-      const saveBtn = s.getElementById('croxync-save-btn');
+      var saveBtn = s.getElementById('croxync-save-btn');
       saveBtn.classList.add('saved');
-      saveBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        Saved!
-      `;
-      setTimeout(() => {
+      saveBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Saved!';
+      setTimeout(function() {
         saveBtn.classList.remove('saved');
-        saveBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-          Save
-        `;
+        saveBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg> Save';
       }, 1500);
     }
   }
 
   function onCopyAndSave() {
-    const text = getSelectedText();
+    var text = getSelectedText();
     if (!text) {
       showToast('Nothing selected', 'error');
       return;
     }
-    const isLink = isUrl(text);
-    const category = getActiveCategory();
+    var isLink = isUrl(text);
+    var category = getActiveCategory();
 
-    navigator.clipboard.writeText(text).then(() => {
+    navigator.clipboard.writeText(text).then(function() {
       sendToBackground({
         content: text,
         type: isLink ? 'url' : 'text',
@@ -881,7 +879,7 @@
         source: location.href,
       });
       showToast('Copied & saved!', 'success', isLink);
-    }).catch(() => {
+    }).catch(function() {
       sendToBackground({
         content: text,
         type: isLink ? 'url' : 'text',
@@ -893,14 +891,14 @@
   }
 
   function onPasteSubmit() {
-    const s = shadow();
+    var s = shadow();
     if (!s) return;
-    const input = s.getElementById('croxync-paste-input');
-    const text = input.value.trim();
+    var input = s.getElementById('croxync-paste-input');
+    var text = input.value.trim();
     if (!text) return;
 
-    const isLink = isUrl(text);
-    const category = getActiveCategory();
+    var isLink = isUrl(text);
+    var category = getActiveCategory();
     sendToBackground({
       content: text,
       type: isLink ? 'url' : 'text',
@@ -911,39 +909,39 @@
     input.value = '';
   }
 
-  function onDocumentClick(e) {
-    if (widget && widget.contains(e.target)) return;
-    const s = shadow();
-    if (!s) return;
-    const wrapper = s.querySelector('.wrapper');
-    if (wrapper && (e.target === wrapper || wrapper.contains(e.target))) return;
-    if (sitePopup && sitePopup.contains(e.target)) return;
-    if (isVisible) {
-      const text = getSelectedText();
-      if (!text) hideWidget();
-    }
-  }
-
-  function onKeyDown(e) {
-    if (e.key === 'Escape' && isVisible) dismiss();
-  }
-
   function isUrl(text) {
-    try { new URL(text); return true; } catch { return false; }
+    try { new URL(text); return true; } catch(e) { return false; }
   }
 
-  let selectionDebounce = null;
-  let lastSelectionText = '';
+  // === Event Handlers ===
 
-  document.addEventListener('mouseup', () => {
+  // Single mousedown handler: hide widget when clicking outside it
+  document.addEventListener('mousedown', function(e) {
+    if (isInsideWidget(e)) return;
+    var text = getSelectedText();
+    if (!text && isVisible) {
+      hideWidget();
+    }
+  });
+
+  // Escape key to dismiss
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && isVisible) dismiss();
+  });
+
+  // Mouseup: show tooltip on text selection
+  var selectionDebounce = null;
+  var lastSelectionText = '';
+
+  document.addEventListener('mouseup', function() {
     clearTimeout(selectionDebounce);
-    selectionDebounce = setTimeout(() => {
-      const text = getSelectedText();
+    selectionDebounce = setTimeout(function() {
+      var text = getSelectedText();
       if (text && text.length > 0) {
         if (text !== lastSelectionText || !isVisible) {
           lastSelectionText = text;
           ensureWidget();
-          const s = shadow();
+          var s = shadow();
           if (!s) return;
           showPill(text);
           positionNearSelection();
@@ -954,7 +952,7 @@
         lastSelectionText = '';
         if (isVisible && !isExpanded) {
           clearTimeout(hideTimeout);
-          hideTimeout = setTimeout(() => {
+          hideTimeout = setTimeout(function() {
             if (!getSelectedText()) hideWidget();
           }, 200);
         }
@@ -962,48 +960,32 @@
     }, 60);
   });
 
-  document.addEventListener('mousedown', (e) => {
-    // Check if click is inside our widget or shadow DOM
-    if (widget && widget.contains(e.target)) return;
-    const s = shadow();
-    if (!s) return;
-    // Also check shadow root elements
-    const wrapper = s.querySelector('.wrapper');
-    if (wrapper && (e.target === wrapper || wrapper.contains(e.target))) return;
-    // Check if clicking inside any popup we created
-    if (sitePopup && sitePopup.contains(e.target)) return;
-    
-    const text = getSelectedText();
-    if (!text && isVisible) {
-      hideWidget();
-    }
-  });
-
-  document.addEventListener('selectionchange', () => {
-    const text = getSelectedText();
+  // Selection change: auto-hide when selection cleared
+  document.addEventListener('selectionchange', function() {
+    var text = getSelectedText();
     if (!text && isVisible) {
       clearTimeout(hideTimeout);
-      hideTimeout = setTimeout(() => {
+      hideTimeout = setTimeout(function() {
         if (!getSelectedText()) hideWidget();
       }, 200);
     }
   });
 
-// === Auto-save on copy + URL popup + site detection ===
-  let lastCopiedContent = '';
-  let lastCopiedTime = 0;
+  // === Auto-save on copy + URL popup ===
+  var lastCopiedContent = '';
+  var lastCopiedTime = 0;
 
   function handleCopiedText(text) {
     if (!text || text.length < 2) return;
-    
-    const trimmedText = text.trim();
-    const now = Date.now();
-    
-    if (trimmedText === lastCopiedContent && (now - lastCopiedTime) < 2000) return;
-    
-    const copiedIsUrl = isUrl(trimmedText);
 
-    // Always show URL popup for URLs when copied
+    var trimmedText = text.trim();
+    var now = Date.now();
+
+    if (trimmedText === lastCopiedContent && (now - lastCopiedTime) < 2000) return;
+
+    var copiedIsUrl = isUrl(trimmedText);
+
+    // Show popup for URLs
     if (copiedIsUrl) {
       showSitePopup(trimmedText);
       lastCopiedContent = trimmedText;
@@ -1011,10 +993,10 @@
     }
 
     // Save to backend if code is set
-    chrome.storage.sync.get(['croxyncCode', 'autoSave', 'autoPasteUrl'], (settings) => {
+    chrome.storage.sync.get(['croxyncCode', 'autoSave', 'autoPasteUrl'], function(settings) {
       if (!settings.croxyncCode) return;
 
-      let shouldSave = false;
+      var shouldSave = false;
       if (copiedIsUrl && settings.autoPasteUrl !== false) shouldSave = true;
       else if (!copiedIsUrl && settings.autoSave === true) shouldSave = true;
 
@@ -1022,8 +1004,8 @@
         lastCopiedContent = trimmedText;
         lastCopiedTime = Date.now();
 
-        const category = typeof detectCategory === 'function' ? detectCategory(trimmedText, copiedIsUrl ? 'url' : 'text') : (copiedIsUrl ? 'links' : 'general');
-        const siteInfo = getSiteInfo(trimmedText);
+        var category = typeof detectCategory === 'function' ? detectCategory(trimmedText, copiedIsUrl ? 'url' : 'text') : (copiedIsUrl ? 'links' : 'general');
+        var siteInfo = getSiteInfo(trimmedText);
 
         chrome.runtime.sendMessage({
           type: 'AUTO_SAVE_CLIP',
@@ -1034,7 +1016,7 @@
             title: siteInfo.title || document.title,
             source: location.href,
           },
-        }, (response) => {
+        }, function(response) {
           if (chrome.runtime.lastError) return;
           if (response && response.success && !response.dedup) {
             showToast(copiedIsUrl ? 'Link auto-synced!' : 'Copied & synced!', 'success', copiedIsUrl);
@@ -1046,54 +1028,51 @@
     });
   }
 
-  // Primary: capture selected text on copy event (works for text selections)
-  document.addEventListener('copy', () => {
-    // Capture selection text synchronously before the event clears it
-    const sel = window.getSelection();
-    const text = sel ? sel.toString().trim() : '';
+  // Copy event: capture selected text synchronously
+  document.addEventListener('copy', function() {
+    var sel = window.getSelection();
+    var text = sel ? sel.toString().trim() : '';
     if (text && text.length >= 2) {
       handleCopiedText(text);
     }
   });
 
-  // Secondary: detect Ctrl/Cmd+C via keydown (works even if copy event doesn't fire)
-  // and for cases where the copy event doesn't bubble (e.g. address bar copy)
-  document.addEventListener('keydown', (e) => {
+  // Keydown Ctrl/Cmd+C fallback for address bar copies
+  document.addEventListener('keydown', function(e) {
     if (!(e.ctrlKey || e.metaKey) || e.key !== 'c') return;
-    if (e.shiftKey) return; // Don't trigger on Ctrl+Shift+C
-    
-    // Small delay to let clipboard update
-    setTimeout(() => {
-      // Try to read from the current selection first
-      const sel = window.getSelection();
-      const selectedText = sel ? sel.toString().trim() : '';
+    if (e.shiftKey) return;
+
+    setTimeout(function() {
+      var sel = window.getSelection();
+      var selectedText = sel ? sel.toString().trim() : '';
       if (selectedText && selectedText.length >= 2) {
         handleCopiedText(selectedText);
       } else {
-        // Fallback: try clipboard (may fail due to permissions)
-        navigator.clipboard.readText().then((clipText) => {
+        navigator.clipboard.readText().then(function(clipText) {
           if (clipText && clipText.trim().length >= 2) {
             handleCopiedText(clipText);
           }
-        }).catch(() => {});
+        }).catch(function() {});
       }
     }, 100);
   });
 
+  // === Site info and popup ===
+
   function getSiteInfo(url) {
     try {
-      const u = new URL(url);
-      const host = u.hostname;
-      const info = { title: null, type: 'url' };
+      var u = new URL(url);
+      var host = u.hostname;
+      var info = { title: null, type: 'url' };
 
       if (host.includes('youtube.com') || host.includes('youtu.be')) {
-        const vid = u.searchParams.get('v') || (host.includes('youtu.be') ? u.pathname.slice(1) : null);
+        var vid = u.searchParams.get('v') || (host.includes('youtu.be') ? u.pathname.slice(1) : null);
         if (vid) {
           info.title = 'YouTube: ' + (document.title.replace(/\s*[-|].*$/, '').trim() || vid);
           info.type = 'youtube';
         }
       } else if (host.includes('github.com')) {
-        const parts = u.pathname.split('/').filter(Boolean);
+        var parts = u.pathname.split('/').filter(Boolean);
         if (parts.length >= 2) {
           info.title = 'GitHub: ' + parts[0] + '/' + parts[1];
           info.type = 'github';
@@ -1119,14 +1098,13 @@
       }
 
       return info;
-    } catch { return { title: null, type: 'url' }; }
+    } catch(e) { return { title: null, type: 'url' }; }
   }
 
-  // === Site-specific popups ===
-  let sitePopup = null;
+  var sitePopup = null;
 
   function getSiteIcon(type) {
-    const icons = {
+    var icons = {
       youtube: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="20" height="16" rx="4" fill="#ff0000"/><path d="M10 8l6 4-6 4V8z" fill="white"/></svg>',
       github: '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>',
       twitter: '<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
@@ -1138,7 +1116,7 @@
   }
 
   function getSiteColor(type) {
-    const colors = {
+    var colors = {
       youtube: '#ff0000',
       github: '#333',
       twitter: '#1da1f2',
@@ -1152,17 +1130,16 @@
   }
 
   function showSitePopup(url) {
-    // Dismiss any existing popup first
     if (sitePopup) {
       dismissSitePopup();
     }
 
-    const siteInfo = getSiteInfo(url);
-    const siteType = siteInfo.type;
-    const color = getSiteColor(siteType);
-    const icon = getSiteIcon(siteType);
-    const truncated = url.length > 45 ? url.slice(0, 45) + '...' : url;
-    const label = {
+    var siteInfo = getSiteInfo(url);
+    var siteType = siteInfo.type;
+    var color = getSiteColor(siteType);
+    var icon = getSiteIcon(siteType);
+    var truncated = url.length > 45 ? url.slice(0, 45) + '...' : url;
+    var label = {
       youtube: 'Video copied!',
       github: 'Repo copied!',
       twitter: 'Post copied!',
@@ -1174,68 +1151,25 @@
       url: 'Link copied!',
     }[siteType] || 'Link copied!';
 
-    // Create the popup element
     sitePopup = document.createElement('div');
     sitePopup.id = 'croxync-site-popup';
-    
-    // Apply all styles directly to the element
-    sitePopup.style.cssText = `
-      position: fixed !important;
-      bottom: 28px !important;
-      right: 28px !important;
-      z-index: 2147483647 !important;
-      background: #0f172a !important;
-      border: 1px solid rgba(255,255,255,0.08) !important;
-      border-radius: 16px !important;
-      box-shadow: 0 16px 48px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04) !important;
-      min-width: 300px !important;
-      max-width: 420px !important;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-      backdrop-filter: blur(12px) !important;
-      animation: croxync-site-slide 0.3s cubic-bezier(0.16,1,0.3,1) !important;
-      pointer-events: auto !important;
-    `;
+    sitePopup.style.cssText = 'position:fixed!important;bottom:28px!important;right:28px!important;z-index:2147483647!important;background:#0f172a!important;border:1px solid rgba(255,255,255,0.08)!important;border-radius:16px!important;box-shadow:0 16px 48px rgba(0,0,0,0.4),0 0 0 1px rgba(255,255,255,0.04)!important;min-width:300px!important;max-width:420px!important;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif!important;backdrop-filter:blur(12px)!important;pointer-events:auto!important;';
 
-    sitePopup.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;">
-        <div style="flex-shrink:0;width:40px;height:40px;border-radius:12px;background:${color};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px ${color}40;">
-          ${icon}
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">${label}</div>
-          <div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;margin-top:2px;">${truncated}</div>
-        </div>
-        <div style="flex-shrink:0;display:flex;align-items:center;gap:4px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span style="font-size:11px;color:#4ade80;font-weight:600;">Copied</span>
-        </div>
-      </div>
-    `;
+    sitePopup.innerHTML = '<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;"><div style="flex-shrink:0;width:40px;height:40px;border-radius:12px;background:' + color + ';display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px ' + color + '40;">' + icon + '</div><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;">' + label + '</div><div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;margin-top:2px;">' + truncated + '</div></div><div style="flex-shrink:0;display:flex;align-items:center;gap:4px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span style="font-size:11px;color:#4ade80;font-weight:600;">Copied</span></div></div>';
 
-    // Add animation keyframes to document head
-    const styleId = 'croxync-site-popup-styles';
-    let styleEl = document.getElementById(styleId);
-    if (!styleEl) {
-      styleEl = document.createElement('style');
+    // Ensure animation keyframes exist
+    var styleId = 'croxync-site-popup-styles';
+    if (!document.getElementById(styleId)) {
+      var styleEl = document.createElement('style');
       styleEl.id = styleId;
-      styleEl.textContent = `
-        @keyframes croxync-site-slide {
-          0% { opacity:0; transform:translateY(16px) scale(0.96); }
-          100% { opacity:1; transform:translateY(0) scale(1); }
-        }
-        @keyframes croxync-site-out {
-          0% { opacity:1; transform:translateY(0) scale(1); }
-          100% { opacity:0; transform:translateY(12px) scale(0.96); }
-        }
-      `;
+      styleEl.textContent = '@keyframes croxync-site-slide{0%{opacity:0;transform:translateY(16px) scale(0.96)}100%{opacity:1;transform:translateY(0) scale(1)}}@keyframes croxync-site-out{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(12px) scale(0.96)}}';
       document.head.appendChild(styleEl);
     }
 
+    sitePopup.style.animation = 'croxync-site-slide 0.3s cubic-bezier(0.16,1,0.3,1) forwards';
     document.body.appendChild(sitePopup);
 
-    setTimeout(function() {
-      dismissSitePopup();
-    }, 2500);
+    setTimeout(dismissSitePopup, 2500);
   }
 
   function dismissSitePopup() {
@@ -1248,16 +1182,7 @@
     sitePopup = null;
   }
 
-  // Obsolete: showUrlPopup is now showSitePopup (replaced above)
-  // showUrlPopup kept as alias for compatibility
-  function showUrlPopup(url) { showSitePopup(url); }
-
-  chrome.runtime.onMessage.addListener((msg) => {
-    // Future: handle messages from background
-  });
-
-  // === Site-specific auto-popups ===
-  // YouTube video detection
+  // === Site-specific banners ===
   function isYouTubeVideoPage() {
     return location.hostname.includes('youtube.com') && location.pathname === '/watch' && new URLSearchParams(location.search).get('v');
   }
@@ -1271,8 +1196,8 @@
     return titleEl ? titleEl.textContent.trim() : document.title.replace(/\s*[-|].*$/, '').trim();
   }
 
-  let ytBannerDismissed = false;
-  let ytBanner = null;
+  var ytBannerDismissed = false;
+  var ytBanner = null;
 
   function showYouTubeBanner() {
     if (ytBannerDismissed || ytBanner) return;
@@ -1284,88 +1209,42 @@
     var videoUrl = 'https://www.youtube.com/watch?v=' + videoId;
     var videoTitle = getYouTubeVideoTitle();
 
-    ytBanner.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;">
-        <div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#ff0000,#cc0000);display:flex;align-items:center;justify-content:center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this video?</div>
-          <div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${videoTitle}</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;">
-          <button id="croxync-yt-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;transition:filter 0.15s;">Save</button>
-          <button id="croxync-yt-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;transition:all 0.15s;">Later</button>
-        </div>
-      </div>
-    `;
+    ytBanner.innerHTML = '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;"><div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#ff0000,#cc0000);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg></div><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this video?</div><div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">' + videoTitle + '</div></div><div style="display:flex;gap:6px;flex-shrink:0;"><button id="croxync-yt-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;transition:filter 0.15s;">Save</button><button id="croxync-yt-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;transition:all 0.15s;">Later</button></div></div>';
 
     var style = document.createElement('style');
-    style.textContent = `
-      #croxync-yt-banner {
-        position: fixed;
-        top: 70px;
-        right: 20px;
-        z-index: 2147483646;
-        background: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 14px;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        min-width: 320px;
-        max-width: 400px;
-        animation: croxync-yt-slide 0.25s ease-out;
-      }
-      #croxync-yt-save:hover { filter: brightness(1.1); }
-      #croxync-yt-dismiss:hover { background: #1e293b; color: #e2e8f0; }
-      @keyframes croxync-yt-slide {
-        0% { opacity:0; transform:translateX(20px); }
-        100% { opacity:1; transform:translateX(0); }
-      }
-      @keyframes croxync-yt-out {
-        0% { opacity:1; transform:translateX(0); }
-        100% { opacity:0; transform:translateX(20px); }
-      }
-    `;
+    style.textContent = '#croxync-yt-banner{position:fixed;top:70px;right:20px;z-index:2147483646;background:#0f172a;border:1px solid #1e293b;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.05);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;min-width:320px;max-width:400px;animation:croxync-yt-slide 0.25s ease-out;}#croxync-yt-save:hover{filter:brightness(1.1)}#croxync-yt-dismiss:hover{background:#1e293b;color:#e2e8f0}@keyframes croxync-yt-slide{0%{opacity:0;transform:translateX(20px)}100%{opacity:1;transform:translateX(0)}}@keyframes croxync-yt-out{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(20px)}}';
     ytBanner.appendChild(style);
-
     document.body.appendChild(ytBanner);
 
-    ytBanner.querySelector('#croxync-yt-save').addEventListener('click', function() {
-      sendToBackground({
-        content: videoUrl,
-        type: 'url',
-        category: 'links',
-        title: videoTitle,
-        source: location.href,
-      });
+    ytBanner.querySelector('#croxync-yt-save').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      sendToBackground({ content: videoUrl, type: 'url', category: 'links', title: videoTitle, source: location.href });
       dismissYtBanner();
-    });
-
-    ytBanner.querySelector('#croxync-yt-dismiss').addEventListener('click', function() {
+    }, true);
+    ytBanner.querySelector('#croxync-yt-dismiss').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
       dismissYtBanner();
-    });
+    }, true);
   }
 
   function dismissYtBanner() {
     if (!ytBanner) return;
     ytBanner.style.animation = 'croxync-yt-out 0.2s ease-in forwards';
     var banner = ytBanner;
-    setTimeout(function() {
-      if (banner.parentNode) banner.parentNode.removeChild(banner);
-    }, 200);
+    setTimeout(function() { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 200);
     ytBanner = null;
     ytBannerDismissed = true;
     setTimeout(function() { ytBannerDismissed = false; }, 600000);
   }
 
-  // GitHub repo detection
   function isGitHubRepoPage() {
     return location.hostname === 'github.com' && /^\/[^/]+\/[^/]+/.test(location.pathname);
   }
 
-  let ghBannerDismissed = false;
-  let ghBanner = null;
+  var ghBannerDismissed = false;
+  var ghBanner = null;
 
   function showGitHubBanner() {
     if (ghBannerDismissed || ghBanner) return;
@@ -1376,76 +1255,31 @@
 
     ghBanner = document.createElement('div');
     ghBanner.id = 'croxync-gh-banner';
-
-    ghBanner.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;">
-        <div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#24292e,#40464d);display:flex;align-items:center;justify-content:center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-        </div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this repo?</div>
-          <div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">${repoName}</div>
-        </div>
-        <div style="display:flex;gap:6px;flex-shrink:0;">
-          <button id="croxync-gh-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;">Save</button>
-          <button id="croxync-gh-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;">Later</button>
-        </div>
-      </div>
-    `;
+    ghBanner.innerHTML = '<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;"><div style="flex-shrink:0;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#24292e,#40464d);display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg></div><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:2px;">Save this repo?</div><div style="font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;">' + repoName + '</div></div><div style="display:flex;gap:6px;flex-shrink:0;"><button id="croxync-gh-save" style="padding:6px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#0ea5e9,#6366f1);color:white;font-size:12px;font-weight:600;cursor:pointer;">Save</button><button id="croxync-gh-dismiss" style="padding:6px 10px;border-radius:8px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:12px;cursor:pointer;">Later</button></div></div>';
 
     var style = document.createElement('style');
-    style.textContent = `
-      #croxync-gh-banner {
-        position: fixed;
-        top: 70px;
-        right: 20px;
-        z-index: 2147483646;
-        background: #0f172a;
-        border: 1px solid #1e293b;
-        border-radius: 14px;
-        box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        min-width: 300px;
-        max-width: 400px;
-        animation: croxync-gh-slide 0.25s ease-out;
-      }
-      #croxync-gh-save:hover { filter: brightness(1.1); }
-      #croxync-gh-dismiss:hover { background: #1e293b; color: #e2e8f0; }
-      @keyframes croxync-gh-slide {
-        0% { opacity:0; transform:translateX(20px); }
-        100% { opacity:1; transform:translateX(0); }
-      }
-      @keyframes croxync-gh-out {
-        0% { opacity:1; transform:translateX(0); }
-        100% { opacity:0; transform:translateX(20px); }
-      }
-    `;
+    style.textContent = '#croxync-gh-banner{position:fixed;top:70px;right:20px;z-index:2147483646;background:#0f172a;border:1px solid #1e293b;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,0.5);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;min-width:300px;max-width:400px;animation:croxync-gh-slide 0.25s ease-out;}#croxync-gh-save:hover{filter:brightness(1.1)}#croxync-gh-dismiss:hover{background:#1e293b;color:#e2e8f0}@keyframes croxync-gh-slide{0%{opacity:0;transform:translateX(20px)}100%{opacity:1;transform:translateX(0)}}@keyframes croxync-gh-out{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(20px)}}';
     ghBanner.appendChild(style);
     document.body.appendChild(ghBanner);
 
-    ghBanner.querySelector('#croxync-gh-save').addEventListener('click', function() {
-      sendToBackground({
-        content: repoUrl,
-        type: 'url',
-        category: 'links',
-        title: 'GitHub: ' + repoName,
-        source: location.href,
-      });
+    ghBanner.querySelector('#croxync-gh-save').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      sendToBackground({ content: repoUrl, type: 'url', category: 'links', title: 'GitHub: ' + repoName, source: location.href });
       dismissGhBanner();
-    });
-
-    ghBanner.querySelector('#croxync-gh-dismiss').addEventListener('click', function() {
+    }, true);
+    ghBanner.querySelector('#croxync-gh-dismiss').addEventListener('click', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
       dismissGhBanner();
-    });
+    }, true);
   }
 
   function dismissGhBanner() {
     if (!ghBanner) return;
     ghBanner.style.animation = 'croxync-gh-out 0.2s ease-in forwards';
     var banner = ghBanner;
-    setTimeout(function() {
-      if (banner.parentNode) banner.parentNode.removeChild(banner);
-    }, 200);
+    setTimeout(function() { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 200);
     ghBanner = null;
     ghBannerDismissed = true;
     setTimeout(function() { ghBannerDismissed = false; }, 600000);
@@ -1455,7 +1289,6 @@
   if (isYouTubeVideoPage()) {
     setTimeout(showYouTubeBanner, 1500);
   }
-
   if (isGitHubRepoPage()) {
     setTimeout(showGitHubBanner, 1500);
   }
@@ -1467,16 +1300,10 @@
       lastUrl = location.href;
       ytBannerDismissed = false;
       ghBannerDismissed = false;
-
       if (ytBanner && ytBanner.parentNode) { ytBanner.parentNode.removeChild(ytBanner); ytBanner = null; }
       if (ghBanner && ghBanner.parentNode) { ghBanner.parentNode.removeChild(ghBanner); ghBanner = null; }
-
-      if (isYouTubeVideoPage()) {
-        setTimeout(showYouTubeBanner, 1500);
-      }
-      if (isGitHubRepoPage()) {
-        setTimeout(showGitHubBanner, 1500);
-      }
+      if (isYouTubeVideoPage()) setTimeout(showYouTubeBanner, 1500);
+      if (isGitHubRepoPage()) setTimeout(showGitHubBanner, 1500);
     }
   }, 1000);
 })();
